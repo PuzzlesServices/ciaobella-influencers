@@ -14,6 +14,7 @@ export interface Influencer {
   followers: string;
   followersRaw: number;
   engagement: string;
+  engagementRaw: number | null;  // numeric rate from DB/search, null if unknown
   matchScore: number;
   niche: string;
   avatar: string;
@@ -37,7 +38,9 @@ function EngagementLabel({ rate }: { rate: number }) {
 
 const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
   const [isSaved, setIsSaved] = useState(false);
-  const [realEngagement, setRealEngagement] = useState<string | null>(null);
+  const [realEngagement, setRealEngagement] = useState<string | null>(
+    influencer.engagementRaw != null ? `${influencer.engagementRaw.toFixed(1)}%` : null
+  );
   const [viralPosts, setViralPosts] = useState(0);
 
   const { mutate: save, isPending: isSaving } = useSaveInfluencer();
@@ -58,6 +61,8 @@ const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
       },
     });
   };
+
+  const hasCachedEngagement = influencer.engagementRaw != null;
 
   return (
     <div className="group bg-card rounded-xl border border-border p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col">
@@ -118,6 +123,18 @@ const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
                     {viralPosts} viral
                   </span>
                 )}
+                <button
+                  onClick={handleCalculateEngagement}
+                  disabled={isScraping}
+                  title={hasCachedEngagement ? 'Recalculate from last 5 posts' : 'Calculate from last 5 posts'}
+                  className="inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  {isScraping ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <BarChart2 className="w-3 h-3" />
+                  )}
+                </button>
               </div>
             ) : (
               <button

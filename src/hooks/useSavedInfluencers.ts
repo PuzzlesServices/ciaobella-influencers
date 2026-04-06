@@ -20,15 +20,16 @@ function getInitials(name: string): string {
 function rowToInfluencer(row: InfluencerRow): Influencer {
   const displayName = row.full_name || row.username;
   return {
-    name:        displayName,
-    username:    `@${row.username}`,
-    followers:   formatFollowers(row.followers_count),
-    followersRaw: row.followers_count ?? 0,
-    engagement:  row.engagement_rate != null ? `${Number(row.engagement_rate).toFixed(1)}%` : '—',
-    matchScore:  row.match_score ?? 0,
-    niche:       row.ai_category ?? '—',
-    avatar:      getInitials(displayName),
-    profileUrl:  `https://www.instagram.com/${row.username}/`,
+    name:          displayName,
+    username:      `@${row.username}`,
+    followers:     formatFollowers(row.followers_count),
+    followersRaw:  row.followers_count ?? 0,
+    engagement:    row.engagement_rate != null ? `${Number(row.engagement_rate).toFixed(1)}%` : '—',
+    engagementRaw: row.engagement_rate != null ? Number(row.engagement_rate) : null,
+    matchScore:    row.match_score ?? 0,
+    niche:         row.ai_category ?? '—',
+    avatar:        getInitials(displayName),
+    profileUrl:    `https://www.instagram.com/${row.username}/`,
     profilePicUrl: row.profile_pic ?? undefined,
   };
 }

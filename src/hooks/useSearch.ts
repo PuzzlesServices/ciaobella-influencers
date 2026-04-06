@@ -50,6 +50,7 @@ function toInfluencer(p: ScoredInfluencer): Influencer {
     followers: formatFollowers(p.followersCount),
     followersRaw: p.followersCount,
     engagement: `${(p.engagementRate ?? 0).toFixed(1)}%`,
+    engagementRaw: p.engagementRate ?? null,
     matchScore: p.score,
     niche: p.niche,
     avatar: getInitials(p.fullName || p.username),
