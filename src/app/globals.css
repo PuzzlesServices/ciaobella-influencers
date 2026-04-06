@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 45 40% 96%;        /* #F9F7F1 */
+    --foreground: 215 25% 17%;
+
+    --card: 45 40% 98%;
+    --card-foreground: 215 25% 17%;
+
+    --popover: 45 40% 98%;
+    --popover-foreground: 215 25% 17%;
+
+    --primary: 1 53% 34%;            /* #842B29 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 45 30% 91%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 45 25% 92%;
+    --muted-foreground: 215 12% 52%;
+
+    --accent: 1 53% 34%;             /* #842B29 */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 45 20% 87%;
+    --input: 45 20% 87%;
+    --ring: 1 53% 34%;               /* #842B29 */
+
+    --radius: 0.625rem;
+
+    --sidebar-background: 45 35% 94%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 1 53% 34%;    /* #842B29 */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 45 30% 91%;
+    --sidebar-accent-foreground: 215 25% 17%;
+    --sidebar-border: 45 20% 87%;
+    --sidebar-ring: 1 53% 34%;       /* #842B29 */
+
+    --match-high: 142 71% 45%;
+    --match-medium: 38 92% 50%;
+    --match-low: 0 84% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}

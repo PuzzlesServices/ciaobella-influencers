@@ -1,93 +1,57 @@
-import { useState } from "react";
-import { Settings2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+'use client';
 
-const styles = ["Minimalist", "Luxury", "Handmade"];
+import { Search, BookmarkCheck, BarChart2, Settings } from "lucide-react";
+import Image from "next/image";
 
-const CampaignSidebar = () => {
-  const [budget, setBudget] = useState([1500]);
-  const [selectedStyles, setSelectedStyles] = useState<string[]>(["Minimalist"]);
+export type NavView = 'Search' | 'Saved' | 'Analytics' | 'Settings';
 
-  const toggleStyle = (style: string) => {
-    setSelectedStyles((prev) =>
-      prev.includes(style) ? prev.filter((s) => s !== style) : [...prev, style]
-    );
-  };
+const NAV_ITEMS: { icon: React.ElementType; label: NavView }[] = [
+  { icon: Search,        label: 'Search'    },
+  { icon: BookmarkCheck, label: 'Saved'     },
+  { icon: BarChart2,     label: 'Analytics' },
+  { icon: Settings,      label: 'Settings'  },
+];
 
+interface Props {
+  activeView: NavView;
+  onNavigate: (view: NavView) => void;
+}
+
+const CampaignSidebar = ({ activeView, onNavigate }: Props) => {
   return (
-    <aside className="w-72 flex-shrink-0 bg-sidebar border-r border-sidebar-border h-screen sticky top-0 overflow-y-auto">
-      <div className="p-6">
-        <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Settings2 className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <h2 className="text-base font-semibold text-sidebar-foreground">Campaign Settings</h2>
-        </div>
-
-        {/* Compensation Type */}
-        <div className="mb-6">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-            Compensation Type
-          </label>
-          <Select defaultValue="mixed">
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="gifting">Product Gifting</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="mixed">Mixed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Budget Slider */}
-        <div className="mb-6">
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-            Max Budget
-          </label>
-          <div className="mt-3">
-            <Slider
-              value={budget}
-              onValueChange={setBudget}
-              max={5000}
-              min={100}
-              step={100}
-            />
-            <div className="flex justify-between mt-2">
-              <span className="text-xs text-muted-foreground">$100</span>
-              <span className="text-sm font-semibold text-foreground">${budget[0].toLocaleString()}</span>
-              <span className="text-xs text-muted-foreground">$5,000</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Jewelry Style Chips */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 block">
-            Jewelry Style
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {styles.map((style) => {
-              const active = selectedStyles.includes(style);
-              return (
-                <button
-                  key={style}
-                  onClick={() => toggleStyle(style)}
-                  className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
-                    active
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-card text-muted-foreground border-border hover:border-primary/40"
-                  }`}
-                >
-                  {style}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+    <aside className="w-64 flex-shrink-0 bg-sidebar border-r border-sidebar-border h-screen sticky top-0 flex flex-col">
+      {/* Logo */}
+      <div className="px-6 py-5 border-b border-sidebar-border flex justify-center">
+        <Image
+          src="/logo-monisha.webp"
+          alt="Monisha Melwani"
+          width={100}
+          height={48}
+          className="object-contain"
+          priority
+        />
       </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {NAV_ITEMS.map(({ icon: Icon, label }) => {
+          const isActive = activeView === label;
+          return (
+            <button
+              key={label}
+              onClick={() => onNavigate(label)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
     </aside>
   );
 };
