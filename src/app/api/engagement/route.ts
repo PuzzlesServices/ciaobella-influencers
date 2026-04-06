@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { scrapeUserPosts } from '@/server/services/apify';
 import { getAdminClient } from '@/lib/supabase';
 
-export const maxDuration = 1200;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {

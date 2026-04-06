@@ -7,7 +7,7 @@ import { cacheInfluencer } from '@/server/db/influencers';
 import { SearchRequest, ScoredInfluencer } from '@/server/types';
 
 // Allow up to 20 minutes — Apify scraper can take 15+ min on rate-limited runs
-export const maxDuration = 1200;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
