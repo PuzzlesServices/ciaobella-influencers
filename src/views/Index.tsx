@@ -16,6 +16,7 @@ const Index = () => {
   const [hashtagInput, setHashtagInput] = useState("");
   const [filter, setFilter] = useState("");
   const [sortBy, setSortBy] = useState("match");
+  const [maxResults, setMaxResults] = useState(25);
 
   const { mutate: runSearch, data: searchResult, isPending, isError, error } = useSearch();
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
@@ -32,7 +33,7 @@ const Index = () => {
     const tags = parseTags();
     if (tags.length === 0) return;
     resetAnalysis();
-    runSearch(tags);
+    runSearch({ hashtags: tags, maxResults });
   };
 
   const handleAnalyze = () => {
@@ -133,6 +134,18 @@ const Index = () => {
                   className="pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow w-44"
                 />
               </div>
+
+              <Select value={String(maxResults)} onValueChange={(v) => setMaxResults(Number(v))}>
+                <SelectTrigger className="w-32 shrink-0">
+                  <SelectValue placeholder="Posts" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 posts</SelectItem>
+                  <SelectItem value="25">25 posts</SelectItem>
+                  <SelectItem value="50">50 posts</SelectItem>
+                  <SelectItem value="100">100 posts</SelectItem>
+                </SelectContent>
+              </Select>
 
               <div className="flex items-center gap-2 shrink-0">
                 <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />

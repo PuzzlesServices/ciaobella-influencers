@@ -64,11 +64,11 @@ export interface SearchResult {
   stats: SearchStats;
 }
 
-async function runSearch(hashtags: string[]): Promise<SearchResult> {
+async function runSearch({ hashtags, maxResults }: { hashtags: string[]; maxResults: number }): Promise<SearchResult> {
   const res = await fetch('/api/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hashtags, maxResults: 10 }),
+    body: JSON.stringify({ hashtags, maxResults }),
   });
 
   if (!res.ok) {
