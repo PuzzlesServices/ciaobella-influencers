@@ -5,7 +5,7 @@ import { Users, TrendingUp, Loader2, Bookmark, BookmarkCheck, ExternalLink, BarC
 import { Button } from "@/components/ui/button";
 import MatchRing from "@/components/MatchRing";
 import { Badge } from "@/components/ui/badge";
-import { useSaveInfluencer } from "@/hooks/useSaveInfluencer";
+import { useSaveInfluencer, useUnsaveInfluencer } from "@/hooks/useSaveInfluencer";
 import { useEngagementScrape } from "@/hooks/useEngagementScrape";
 
 export interface Influencer {
@@ -36,14 +36,15 @@ function EngagementLabel({ rate }: { rate: number }) {
   );
 }
 
-const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
-  const [isSaved, setIsSaved] = useState(false);
+const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Influencer; defaultSaved?: boolean }) => {
+  const [isSaved, setIsSaved] = useState(defaultSaved);
   const [realEngagement, setRealEngagement] = useState<string | null>(
     influencer.engagementRaw != null ? `${influencer.engagementRaw.toFixed(1)}%` : null
   );
   const [viralPosts, setViralPosts] = useState(0);
 
   const { mutate: save, isPending: isSaving } = useSaveInfluencer();
+  const { mutate: unsave, isPending: isUnsaving } = useUnsaveInfluencer();
   const { mutate: scrapeEngagement, isPending: isScraping } = useEngagementScrape();
 
   const rawUsername = influencer.username.replace(/^@/, '');
@@ -51,6 +52,10 @@ const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
   const handleSave = () => {
     if (isSaved) return;
     save(rawUsername, { onSuccess: () => setIsSaved(true) });
+  };
+
+  const handleUnsave = () => {
+    unsave(rawUsername, { onSuccess: () => setIsSaved(false) });
   };
 
   const handleCalculateEngagement = () => {
@@ -155,23 +160,32 @@ const InfluencerCard = ({ influencer }: { influencer: Influencer }) => {
 
       {/* Actions */}
       <div className="flex gap-2 mt-auto">
-        <Button
-          onClick={handleSave}
-          disabled={isSaving || isSaved}
-          className={`flex-1 font-medium transition-all ${
-            isSaved
-              ? "bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 cursor-default"
-              : "bg-primary text-primary-foreground hover:bg-primary/90"
-          }`}
-        >
-          {isSaving ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
-          ) : isSaved ? (
-            <><BookmarkCheck className="w-4 h-4 mr-2" /> Saved</>
-          ) : (
-            <><Bookmark className="w-4 h-4 mr-2" /> Save</>
-          )}
-        </Button>
+        {isSaved ? (
+          <Button
+            onClick={handleUnsave}
+            disabled={isUnsaving}
+            variant="outline"
+            className="flex-1 font-medium border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive transition-all"
+          >
+            {isUnsaving ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Removing…</>
+            ) : (
+              <><BookmarkCheck className="w-4 h-4 mr-2" /> Unsave</>
+            )}
+          </Button>
+        ) : (
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-1 font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+          >
+            {isSaving ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</>
+            ) : (
+              <><Bookmark className="w-4 h-4 mr-2" /> Save</>
+            )}
+          </Button>
+        )}
 
         <Button
           onClick={() => window.open(influencer.profileUrl, '_blank', 'noopener,noreferrer')}

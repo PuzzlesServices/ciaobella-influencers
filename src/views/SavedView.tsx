@@ -47,7 +47,7 @@ export default function SavedView() {
         {!isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {influencers?.map((influencer) => (
-              <InfluencerCard key={influencer.username} influencer={influencer} />
+              <InfluencerCard key={influencer.username} influencer={influencer} defaultSaved={true} />
             ))}
             {!isError && influencers?.length === 0 && (
               <div className="col-span-full text-center py-24">

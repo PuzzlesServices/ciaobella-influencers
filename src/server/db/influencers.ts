@@ -149,6 +149,24 @@ export async function updateEngagementRate(username: string, engagementRate: num
 }
 
 // ============================================================
+// unsaveInfluencer
+// Marks a profile as no longer saved by the client.
+// ============================================================
+
+export async function unsaveInfluencer(username: string): Promise<void> {
+  const db = getAdminClient();
+
+  const { error } = await db
+    .from('influencers')
+    .update({ is_saved: false })
+    .eq('username', username);
+
+  if (error) {
+    throw new Error(`[unsaveInfluencer] failed for @${username}: ${error.message}`);
+  }
+}
+
+// ============================================================
 // getTopSavedInfluencers
 // Returns client-saved profiles, ranked by match score.
 // ============================================================
