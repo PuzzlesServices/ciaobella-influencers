@@ -76,16 +76,17 @@ export async function scrapeProfiles(usernames: string[]): Promise<InstagramProf
 }
 
 // ── Miami location IDs (Instagram / Facebook Places) ───────────────────────
-// To find a location ID: search on Instagram, open the location page and
-// grab the numeric ID from the URL:
-// instagram.com/explore/locations/{ID}/
+// To find a location ID: open instagram.com/explore/locations/{ID}/ in browser
+// and grab the numeric/alphanumeric ID from the URL.
+// Add more IDs below as you discover them (Wynwood, Brickell, South Beach, etc.)
 const MIAMI_LOCATION_IDS = [
-  '213385402',      // Miami, Florida (city)
-  '282397981',      // Miami Beach, Florida
-  '1087110449285',  // Wynwood Arts District
-  '362310950',      // Brickell, Miami
-  '270623693',      // Coral Gables, Florida
-  '109457785753',   // Design District, Miami
+  'c3010071',     // Miami, United States (city-level) — verified
+  'c2732922',     // Wynwood — verified
+  'c2733564',     // Brickell — verified
+  '215089928',    // South Beach / Ocean Drive, Miami — verified
+  // Add more neighborhood IDs here:
+  // 'cXXXXXXX',  // Coral Gables
+  // 'cXXXXXXX',  // Design District
 ];
 
 // Normalize posts from apify~instagram-scraper to match HashtagPost shape
