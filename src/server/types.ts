@@ -20,6 +20,8 @@ export interface InstagramProfile {
   isBusinessAccount: boolean;
   externalUrl: string | null;
   profilePicUrl?: string;
+  city?: string;
+  countryCode?: string;
 }
 
 export interface ScoredInfluencer extends InstagramProfile {

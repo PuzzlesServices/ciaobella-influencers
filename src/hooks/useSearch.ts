@@ -22,6 +22,8 @@ interface ScoredInfluencer {
   niche: string;
   engagementRate: number;
   profilePicUrl?: string;
+  city?: string;
+  countryCode?: string;
 }
 
 interface SearchResponse {
@@ -44,6 +46,7 @@ function getInitials(name: string): string {
 }
 
 function toInfluencer(p: ScoredInfluencer): Influencer {
+  const locationParts = [p.city, p.countryCode].filter(Boolean);
   return {
     name: p.fullName || p.username,
     username: `@${p.username}`,
@@ -56,6 +59,7 @@ function toInfluencer(p: ScoredInfluencer): Influencer {
     avatar: getInitials(p.fullName || p.username),
     profileUrl: `https://www.instagram.com/${p.username}/`,
     profilePicUrl: p.profilePicUrl,
+    location: locationParts.length > 0 ? locationParts.join(', ') : undefined,
   };
 }
 

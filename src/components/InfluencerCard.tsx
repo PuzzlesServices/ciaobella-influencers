@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from "react";
-import { Users, TrendingUp, Loader2, Bookmark, BookmarkCheck, ExternalLink, BarChart2, Zap } from "lucide-react";
+import { Users, TrendingUp, Loader2, Bookmark, BookmarkCheck, ExternalLink, BarChart2, Zap, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import MatchRing from "@/components/MatchRing";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ export interface Influencer {
   avatar: string;
   profileUrl: string;
   profilePicUrl?: string;
+  location?: string;
 }
 
 function EngagementLabel({ rate }: { rate: number }) {
@@ -98,6 +99,12 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
           <Badge variant="secondary" className="mt-1.5 text-xs font-medium">
             {influencer.niche}
           </Badge>
+          {influencer.location && (
+            <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+              <MapPin className="w-3 h-3 shrink-0" />
+              <span className="truncate">{influencer.location}</span>
+            </div>
+          )}
         </div>
         <MatchRing score={influencer.matchScore} size={56} />
       </div>
