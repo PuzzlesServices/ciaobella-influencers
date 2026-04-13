@@ -8,15 +8,26 @@ const FULL_NAME_BLOCKLIST = [
   'atelier', 'maison', 'jeweler', 'jeweller', 'goldsmith',
   'accessories', 'accessori', 'bijoux', 'bijouterie',
   'tienda', 'negocio', 'empresa', 'joyeria', 'joyería',
+  // Media / non-personal accounts
+  'news', 'media', 'magazine', 'channel', 'network', 'tv', 'radio',
+  'podcast', 'press', 'digital', 'agency', 'group', 'entertainment',
+  'productions', 'production', 'management', 'talent', 'pr ',
 ];
 
 const USERNAME_BLOCKLIST = [
   'shop', 'store', 'jewel', 'jewelry', 'jewellery', 'diamond',
   'gems', 'boutique', 'official', 'brand', 'studio',
   'design', 'designs', 'collection',
+  // Media / non-personal accounts
+  'news', 'media', 'magazine', 'channel', 'network', 'tv',
+  'radio', 'podcast', 'press', 'agency', 'entertainment',
+  'productions', 'management',
 ];
 
-const USERNAME_SUFFIX_BLOCKLIST = ['.store', '.shop', '_store', '_shop', '_official', '_brand'];
+const USERNAME_SUFFIX_BLOCKLIST = [
+  '.store', '.shop', '_store', '_shop', '_official', '_brand',
+  '_news', '_media', '_tv', '_live', '_channel', '_network',
+];
 
 const LUXURY_NUM_RE = /luxury_\d/;
 

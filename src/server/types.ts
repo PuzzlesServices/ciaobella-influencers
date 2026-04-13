@@ -47,6 +47,10 @@ export interface SearchRequest {
   maxResults?: number;
 }
 
+export interface DiscoverRequest {
+  seeds?: string[];   // optional known Miami influencer handles
+}
+
 export interface SearchResponse {
   influencers: ScoredInfluencer[];
   stats: {

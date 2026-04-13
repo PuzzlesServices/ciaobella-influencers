@@ -75,6 +75,58 @@ export async function scrapeProfiles(usernames: string[]): Promise<InstagramProf
   return profiles;
 }
 
+// ── Miami location IDs (Instagram / Facebook Places) ───────────────────────
+// To find a location ID: search on Instagram, open the location page and
+// grab the numeric ID from the URL:
+// instagram.com/explore/locations/{ID}/
+const MIAMI_LOCATION_IDS = [
+  '213385402',      // Miami, Florida (city)
+  '282397981',      // Miami Beach, Florida
+  '1087110449285',  // Wynwood Arts District
+  '362310950',      // Brickell, Miami
+  '270623693',      // Coral Gables, Florida
+  '109457785753',   // Design District, Miami
+];
+
+// Normalize posts from apify~instagram-scraper to match HashtagPost shape
+function normalizePost(raw: Record<string, unknown>): HashtagPost {
+  return {
+    ownerUsername:  (raw.ownerUsername  ?? raw.owner_username  ?? '') as string,
+    ownerFullName:  (raw.ownerFullName  ?? raw.owner_full_name ?? '') as string,
+    caption:        (raw.caption        ?? raw.text            ?? '') as string,
+    likesCount:     (raw.likesCount     ?? raw.likes_count     ?? 0)  as number,
+    commentsCount:  (raw.commentsCount  ?? raw.comments_count  ?? 0)  as number,
+    hashtags:       (Array.isArray(raw.hashtags) ? raw.hashtags : []) as string[],
+    timestamp:      (raw.timestamp      ?? raw.created_at      ?? '') as string,
+    url:            (raw.url            ?? raw.shortCode
+                      ? `https://www.instagram.com/p/${raw.shortCode}/`
+                      : undefined) as string | undefined,
+  };
+}
+
+export async function scrapeByMiamiLocations(limit: number): Promise<HashtagPost[]> {
+  const perLocation = Math.ceil(limit / MIAMI_LOCATION_IDS.length);
+  const directUrls  = MIAMI_LOCATION_IDS.map(
+    (id) => `https://www.instagram.com/explore/locations/${id}/`
+  );
+
+  console.log(
+    `[apify] Location scraper — ${MIAMI_LOCATION_IDS.length} Miami locations, ~${perLocation} posts each`
+  );
+
+  const datasetId = await startAndWait('apify~instagram-scraper', {
+    directUrls,
+    resultsType:    'posts',
+    resultsLimit:   perLocation,
+    addParentData:  false,
+  });
+
+  const raw = await fetchDataset<Record<string, unknown>>(datasetId);
+  const posts = raw.map(normalizePost).filter((p) => p.ownerUsername);
+  console.log(`[apify] Location scraper returned ${posts.length} posts`);
+  return posts;
+}
+
 export async function scrapeUserPosts(username: string, limit = 5): Promise<UserPost[]> {
   console.log(`[apify] Post scraper — @${username}, limit: ${limit}`);
 
