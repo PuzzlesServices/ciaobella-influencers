@@ -6,6 +6,7 @@ interface SearchStats {
   hashtagPostsFound: number;
   afterPreFilter: number;
   afterProfileFilter: number;
+  afterPresetFilter: number;
   final: number;
 }
 
@@ -68,11 +69,11 @@ export interface SearchResult {
   stats: SearchStats;
 }
 
-async function runSearch({ hashtags, maxResults }: { hashtags: string[]; maxResults: number }): Promise<SearchResult> {
+async function runSearch({ hashtags }: { hashtags: string[] }): Promise<SearchResult> {
   const res = await fetch('/api/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hashtags, maxResults }),
+    body: JSON.stringify({ hashtags }),
   });
 
   if (!res.ok) {

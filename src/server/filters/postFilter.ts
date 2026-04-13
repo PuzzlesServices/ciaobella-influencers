@@ -11,8 +11,8 @@ export function postProfileFilter(profiles: InstagramProfile[]): InstagramProfil
     const bio = (p.biography ?? '').toLowerCase();
 
     if (p.isBusinessAccount && SHOP_BIO_KEYWORDS.some((kw) => bio.includes(kw))) return false;
-    if (p.followersCount < 1_000) return false;
-    if (p.followersCount > 500_000) return false;
+    if (p.followersCount < 30_000) return false;
+    if (p.followersCount > 100_000) return false;
     if (p.postsCount < 12) return false;
     if (!p.biography || p.biography.trim().length === 0) return false;
 

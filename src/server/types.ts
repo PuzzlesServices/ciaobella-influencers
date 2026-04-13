@@ -30,6 +30,9 @@ export interface ScoredInfluencer extends InstagramProfile {
   reason: string;
   niche: string;
   engagementRate: number;
+  gender?: 'female' | 'male' | 'unknown';
+  estimatedAge?: string;
+  inferredCity?: string;
 }
 
 export interface UserPost {

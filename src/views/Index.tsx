@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type KeyboardEvent } from "react";
-import { Search, SlidersHorizontal, Hash, Loader2, AlertCircle, Sparkles, MapPin, Users } from "lucide-react";
+import { Search, SlidersHorizontal, Hash, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import CampaignSidebar, { type NavView } from "@/components/CampaignSidebar";
@@ -16,10 +16,6 @@ const Index = () => {
   const [hashtagInput, setHashtagInput] = useState("");
   const [filter, setFilter] = useState("");
   const [sortBy, setSortBy] = useState("match");
-  const [maxResults, setMaxResults] = useState(25);
-  const [minFollowers, setMinFollowers] = useState(0);
-  const [maxFollowers, setMaxFollowers] = useState(0);
-  const [locationFilter, setLocationFilter] = useState("");
 
   const { mutate: runSearch, data: searchResult, isPending, isError, error } = useSearch();
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
@@ -36,7 +32,7 @@ const Index = () => {
     const tags = parseTags();
     if (tags.length === 0) return;
     resetAnalysis();
-    runSearch({ hashtags: tags, maxResults });
+    runSearch({ hashtags: tags });
   };
 
   const handleAnalyze = () => {
@@ -54,29 +50,15 @@ const Index = () => {
     if (e.key === "Enter") handleSearch();
   };
 
-  const activeFilterCount = [
-    minFollowers > 0,
-    maxFollowers > 0,
-    locationFilter.trim().length > 0,
-  ].filter(Boolean).length;
-
   const displayed = allInfluencers
     .filter((i) => {
-      if (filter) {
-        const q = filter.toLowerCase();
-        const matchesText =
-          i.name.toLowerCase().includes(q) ||
-          i.username.toLowerCase().includes(q) ||
-          i.niche.toLowerCase().includes(q);
-        if (!matchesText) return false;
-      }
-      if (minFollowers > 0 && i.followersRaw < minFollowers) return false;
-      if (maxFollowers > 0 && i.followersRaw > maxFollowers) return false;
-      if (locationFilter.trim()) {
-        const loc = (i.location ?? '').toLowerCase();
-        if (!loc.includes(locationFilter.toLowerCase().trim())) return false;
-      }
-      return true;
+      if (!filter) return true;
+      const q = filter.toLowerCase();
+      return (
+        i.name.toLowerCase().includes(q) ||
+        i.username.toLowerCase().includes(q) ||
+        i.niche.toLowerCase().includes(q)
+      );
     })
     .sort((a, b) => {
       if (sortBy === "match") return b.matchScore - a.matchScore;
@@ -103,7 +85,7 @@ const Index = () => {
       {activeView === 'Search' && (
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top Nav */}
-          <header className="sticky top-0 z-10 bg-card/80 backdrop-blur-md border-b border-border px-6 py-4 space-y-3">
+          <header className="sticky top-0 z-10 bg-card/80 backdrop-blur-md border-b border-border px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
                 <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -152,18 +134,6 @@ const Index = () => {
                 />
               </div>
 
-              <Select value={String(maxResults)} onValueChange={(v) => setMaxResults(Number(v))}>
-                <SelectTrigger className="w-32 shrink-0">
-                  <SelectValue placeholder="Posts" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10 posts</SelectItem>
-                  <SelectItem value="25">25 posts</SelectItem>
-                  <SelectItem value="50">50 posts</SelectItem>
-                  <SelectItem value="100">100 posts</SelectItem>
-                </SelectContent>
-              </Select>
-
               <div className="flex items-center gap-2 shrink-0">
                 <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -179,69 +149,6 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Advanced filters row */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                <Users className="w-3.5 h-3.5" />
-                <span>Followers</span>
-              </div>
-              <Select value={String(minFollowers)} onValueChange={(v) => setMinFollowers(Number(v))}>
-                <SelectTrigger className="w-32 h-8 text-xs">
-                  <SelectValue placeholder="Min" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Any min</SelectItem>
-                  <SelectItem value="1000">1K+</SelectItem>
-                  <SelectItem value="5000">5K+</SelectItem>
-                  <SelectItem value="10000">10K+</SelectItem>
-                  <SelectItem value="25000">25K+</SelectItem>
-                  <SelectItem value="50000">50K+</SelectItem>
-                  <SelectItem value="100000">100K+</SelectItem>
-                  <SelectItem value="250000">250K+</SelectItem>
-                </SelectContent>
-              </Select>
-              <span className="text-xs text-muted-foreground">–</span>
-              <Select value={String(maxFollowers)} onValueChange={(v) => setMaxFollowers(Number(v))}>
-                <SelectTrigger className="w-36 h-8 text-xs">
-                  <SelectValue placeholder="Max" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Any max</SelectItem>
-                  <SelectItem value="10000">Up to 10K</SelectItem>
-                  <SelectItem value="25000">Up to 25K</SelectItem>
-                  <SelectItem value="50000">Up to 50K</SelectItem>
-                  <SelectItem value="100000">Up to 100K</SelectItem>
-                  <SelectItem value="250000">Up to 250K</SelectItem>
-                  <SelectItem value="500000">Up to 500K</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <div className="w-px h-4 bg-border shrink-0" />
-
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Location</span>
-              </div>
-              <div className="relative">
-                <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="City or country…"
-                  value={locationFilter}
-                  onChange={(e) => setLocationFilter(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 h-8 rounded-lg border border-input bg-background text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow w-40"
-                />
-              </div>
-
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={() => { setMinFollowers(0); setMaxFollowers(0); setLocationFilter(''); }}
-                  className="text-xs text-muted-foreground hover:text-destructive transition-colors ml-1"
-                >
-                  Clear filters ({activeFilterCount})
-                </button>
-              )}
-            </div>
           </header>
 
           <main className="flex-1 p-6">
@@ -261,7 +168,8 @@ const Index = () => {
                   <span className="font-medium">{searchResult.stats.hashtagPostsFound}</span> posts scraped
                   {" → "}<span className="font-medium">{searchResult.stats.afterPreFilter}</span> pre-filtered
                   {" → "}<span className="font-medium">{searchResult.stats.afterProfileFilter}</span> profiled
-                  {" → "}<span className="font-medium text-foreground">{searchResult.stats.final}</span> scored
+                  {" → "}<span className="font-medium">{searchResult.stats.afterPresetFilter}</span> AI-verified
+                  {" → "}<span className="font-medium text-foreground">{searchResult.stats.final}</span> ranked
                 </div>
               )}
             </div>
