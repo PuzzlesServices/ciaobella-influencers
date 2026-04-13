@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── PASO 6: Preset filter ──────────────────────────────────────────────
+    const allScored      = [...scored].sort((a, b) => b.score - a.score);
     const presetFiltered = scored.filter(passesPresetFilter);
     console.log(`[tiktok-to-ig] Preset filter: ${scored.length} → ${presetFiltered.length}`);
 
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       influencers: sorted,
+      allScored,
       stats: {
         hashtagPostsFound:  tiktokUsernames.length,
         afterPreFilter:     candidates.length,

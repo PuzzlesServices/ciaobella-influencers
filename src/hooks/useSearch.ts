@@ -1,6 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { type Influencer } from '@/components/InfluencerCard';
 
+const STORAGE_KEY = 'crown_last_hashtag_search';
 
 interface SearchStats {
   hashtagPostsFound: number;
@@ -29,6 +31,7 @@ interface ScoredInfluencer {
 
 interface SearchResponse {
   influencers: ScoredInfluencer[];
+  allScored:   ScoredInfluencer[];
   stats: SearchStats;
 }
 
@@ -39,33 +42,30 @@ function formatFollowers(n: number): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
 
 function toInfluencer(p: ScoredInfluencer): Influencer {
   const locationParts = [p.city, p.countryCode].filter(Boolean);
   return {
-    name: p.fullName || p.username,
-    username: `@${p.username}`,
-    followers: formatFollowers(p.followersCount),
-    followersRaw: p.followersCount,
-    engagement: `${(p.engagementRate ?? 0).toFixed(1)}%`,
+    name:          p.fullName || p.username,
+    username:      `@${p.username}`,
+    followers:     formatFollowers(p.followersCount),
+    followersRaw:  p.followersCount,
+    engagement:    `${(p.engagementRate ?? 0).toFixed(1)}%`,
     engagementRaw: p.engagementRate ?? null,
-    matchScore: p.score,
-    niche: p.niche,
-    avatar: getInitials(p.fullName || p.username),
-    profileUrl: `https://www.instagram.com/${p.username}/`,
+    matchScore:    p.score,
+    niche:         p.niche,
+    avatar:        getInitials(p.fullName || p.username),
+    profileUrl:    `https://www.instagram.com/${p.username}/`,
     profilePicUrl: p.profilePicUrl,
-    location: locationParts.length > 0 ? locationParts.join(', ') : undefined,
+    location:      locationParts.length > 0 ? locationParts.join(', ') : undefined,
   };
 }
 
 export interface SearchResult {
-  influencers: Influencer[];
+  influencers:     Influencer[];
+  allProfiled:     Influencer[];
   stats: SearchStats;
 }
 
@@ -85,10 +85,27 @@ async function runSearch({ hashtags }: { hashtags: string[] }): Promise<SearchRe
 
   return {
     influencers: data.influencers.map(toInfluencer),
+    allProfiled: (data.allScored ?? data.influencers).map(toInfluencer),
     stats: data.stats,
   };
 }
 
 export function useSearch() {
-  return useMutation({ mutationFn: runSearch });
+  const [cached, setCached] = useState<SearchResult | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setCached(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const mutation = useMutation({
+    mutationFn: runSearch,
+    onSuccess: (data) => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+    },
+  });
+
+  return { ...mutation, data: mutation.data ?? cached };
 }

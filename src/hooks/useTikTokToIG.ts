@@ -1,5 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { type Influencer } from '@/components/InfluencerCard';
+
+const STORAGE_KEY = 'crown_last_tiktok_search';
 
 interface SearchStats {
   hashtagPostsFound: number;
@@ -28,6 +31,7 @@ interface ScoredInfluencer {
 
 interface TikTokToIGResponse {
   influencers: ScoredInfluencer[];
+  allScored:   ScoredInfluencer[];
   stats: SearchStats;
 }
 
@@ -38,11 +42,7 @@ function formatFollowers(n: number): string {
 }
 
 function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
+  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
 
 function toInfluencer(p: ScoredInfluencer): Influencer {
@@ -65,6 +65,7 @@ function toInfluencer(p: ScoredInfluencer): Influencer {
 
 export interface TikTokToIGResult {
   influencers: Influencer[];
+  allProfiled: Influencer[];
   stats: SearchStats;
 }
 
@@ -84,10 +85,27 @@ async function runTikTokToIG({ hashtags }: { hashtags: string[] }): Promise<TikT
 
   return {
     influencers: data.influencers.map(toInfluencer),
+    allProfiled: (data.allScored ?? data.influencers).map(toInfluencer),
     stats: data.stats,
   };
 }
 
 export function useTikTokToIG() {
-  return useMutation({ mutationFn: runTikTokToIG });
+  const [cached, setCached] = useState<TikTokToIGResult | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setCached(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const mutation = useMutation({
+    mutationFn: runTikTokToIG,
+    onSuccess: (data) => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+    },
+  });
+
+  return { ...mutation, data: mutation.data ?? cached };
 }

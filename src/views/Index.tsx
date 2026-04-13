@@ -35,6 +35,7 @@ const Index = () => {
   // Shared result controls
   const [filter, setFilter]             = useState("");
   const [sortBy, setSortBy]             = useState("match");
+  const [showAll, setShowAll]           = useState(false);
 
   const {
     mutate: runSearch, data: searchResult,
@@ -60,7 +61,9 @@ const Index = () => {
   const isError     = searchMode === 'hashtag' ? isSearchError : searchMode === 'discovery' ? isDiscoverError : isTikTokError;
   const activeError = searchMode === 'hashtag' ? searchError   : searchMode === 'discovery' ? discoverError   : tiktokError;
   const activeResult = searchMode === 'hashtag' ? searchResult : searchMode === 'discovery' ? discoverResult  : tiktokResult;
-  const allInfluencers: Influencer[] = activeResult?.influencers ?? [];
+  const allInfluencers: Influencer[] = showAll
+    ? (activeResult?.allProfiled ?? [])
+    : (activeResult?.influencers ?? []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -115,10 +118,7 @@ const Index = () => {
   const handleModeChange = (mode: string) => {
     setSearchMode(mode as SearchMode);
     setFilter("");
-    resetSearch();
-    resetDiscover();
-    resetTikTok();
-    resetAnalysis();
+    setShowAll(false);
   };
 
   // ── Displayed results ─────────────────────────────────────────────────────
@@ -166,9 +166,8 @@ const Index = () => {
       {/* Saved view */}
       {activeView === 'Saved' && <SavedView />}
 
-      {/* Search view */}
-      {activeView === 'Search' && (
-        <div className="flex-1 flex flex-col min-w-0">
+      {/* Search view — always mounted to preserve state, hidden when not active */}
+      <div className={`flex-1 flex flex-col min-w-0 ${activeView !== 'Search' ? 'hidden' : ''}`}>
 
           {/* Top Nav */}
           <header className="sticky top-0 z-10 bg-card/80 backdrop-blur-md border-b border-border px-6 py-4 space-y-3">
@@ -346,16 +345,41 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground mt-1">{statusText}</p>
               </div>
               {activeResult && (
-                <div className="text-xs text-muted-foreground text-right leading-relaxed">
-                  <span className="font-medium">{activeResult.stats.hashtagPostsFound}</span>{' '}
-                  {searchMode === 'hashtag' ? 'posts scraped' : 'location posts'}
-                  {" → "}<span className="font-medium">{activeResult.stats.afterPreFilter}</span> pre-filtered
-                  {" → "}<span className="font-medium">{activeResult.stats.afterProfileFilter}</span> profiled
-                  {" → "}<span className="font-medium">{activeResult.stats.afterPresetFilter}</span> AI-verified
-                  {" → "}<span className="font-medium text-foreground">{activeResult.stats.final}</span> ranked
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowAll(false)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      !showAll
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    AI Verified ({activeResult.influencers.length})
+                  </button>
+                  <button
+                    onClick={() => setShowAll(true)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      showAll
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    All 30K+ ({activeResult.allProfiled.length})
+                  </button>
                 </div>
               )}
             </div>
+
+            {activeResult && (
+              <div className="text-xs text-muted-foreground leading-relaxed mb-4">
+                <span className="font-medium">{activeResult.stats.hashtagPostsFound}</span>{' '}
+                {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'discovery' ? 'location posts' : 'TikTok authors'}
+                {" → "}<span className="font-medium">{activeResult.stats.afterPreFilter}</span> pre-filtered
+                {" → "}<span className="font-medium">{activeResult.stats.afterProfileFilter}</span> profiled
+                {" → "}<span className="font-medium">{activeResult.stats.afterPresetFilter}</span> AI-verified
+                {" → "}<span className="font-medium text-foreground">{activeResult.stats.final}</span> ranked
+              </div>
+            )}
 
             {searchMode === 'hashtag' && analysisResult && (
               <HashtagAnalysisPanel
@@ -416,8 +440,7 @@ const Index = () => {
               </div>
             )}
           </main>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

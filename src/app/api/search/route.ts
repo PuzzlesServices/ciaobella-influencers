@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── PASO 6: Preset filter (female · 25-60 · Miami) ────────────────────
+    const allScored      = [...scored].sort((a, b) => b.score - a.score);
     const presetFiltered = scored.filter(passesPresetFilter);
     console.log(
       `[search] Preset filter: ${scored.length} → ${presetFiltered.length} perfiles (female · 25-60 · Miami)`
@@ -131,6 +132,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       influencers: sorted,
+      allScored,
       stats: {
         hashtagPostsFound:  posts.length,
         afterPreFilter:     candidateUsernames.length,

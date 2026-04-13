@@ -75,56 +75,34 @@ export async function scrapeProfiles(usernames: string[]): Promise<InstagramProf
   return profiles;
 }
 
-// ── Miami location IDs (Instagram / Facebook Places) ───────────────────────
-// To find a location ID: open instagram.com/explore/locations/{ID}/ in browser
-// and grab the numeric/alphanumeric ID from the URL.
-// Add more IDs below as you discover them (Wynwood, Brickell, South Beach, etc.)
-const MIAMI_LOCATION_IDS = [
-  'c3010071',     // Miami, United States (city-level) — verified
-  'c2732922',     // Wynwood — verified
-  'c2733564',     // Brickell — verified
-  '215089928',    // South Beach / Ocean Drive, Miami — verified
-  // Add more neighborhood IDs here:
-  // 'cXXXXXXX',  // Coral Gables
-  // 'cXXXXXXX',  // Design District
+// ── Miami Discovery hashtags ────────────────────────────────────────────────
+// Location-specific hashtags still active on Instagram — more reliable than
+// scraping location pages (which Instagram has restricted heavily).
+const MIAMI_DISCOVERY_HASHTAGS = [
+  'miamigirl',
+  'miamilifestyle',
+  'miamiblogger',
+  'wynwoodmiami',
+  'brickellmiami',
+  'southbeachmiami',
+  'miamilife',
+  'miamibeach',
 ];
 
-// Normalize posts from apify~instagram-scraper to match HashtagPost shape
-function normalizePost(raw: Record<string, unknown>): HashtagPost {
-  return {
-    ownerUsername:  (raw.ownerUsername  ?? raw.owner_username  ?? '') as string,
-    ownerFullName:  (raw.ownerFullName  ?? raw.owner_full_name ?? '') as string,
-    caption:        (raw.caption        ?? raw.text            ?? '') as string,
-    likesCount:     (raw.likesCount     ?? raw.likes_count     ?? 0)  as number,
-    commentsCount:  (raw.commentsCount  ?? raw.comments_count  ?? 0)  as number,
-    hashtags:       (Array.isArray(raw.hashtags) ? raw.hashtags : []) as string[],
-    timestamp:      (raw.timestamp      ?? raw.created_at      ?? '') as string,
-    url:            (raw.url            ?? raw.shortCode
-                      ? `https://www.instagram.com/p/${raw.shortCode}/`
-                      : undefined) as string | undefined,
-  };
-}
-
 export async function scrapeByMiamiLocations(limit: number): Promise<HashtagPost[]> {
-  const perLocation = Math.ceil(limit / MIAMI_LOCATION_IDS.length);
-  const directUrls  = MIAMI_LOCATION_IDS.map(
-    (id) => `https://www.instagram.com/explore/locations/${id}/`
-  );
+  const perHashtag = Math.ceil(limit / MIAMI_DISCOVERY_HASHTAGS.length);
 
   console.log(
-    `[apify] Location scraper — ${MIAMI_LOCATION_IDS.length} Miami locations, ~${perLocation} posts each`
+    `[apify] Miami Discovery — ${MIAMI_DISCOVERY_HASHTAGS.length} location hashtags, ~${perHashtag} posts each`
   );
 
-  const datasetId = await startAndWait('apify~instagram-scraper', {
-    directUrls,
-    resultsType:    'posts',
-    resultsLimit:   perLocation,
-    addParentData:  false,
+  const datasetId = await startAndWait('apify~instagram-hashtag-scraper', {
+    hashtags:     MIAMI_DISCOVERY_HASHTAGS,
+    resultsLimit: perHashtag,
   });
 
-  const raw = await fetchDataset<Record<string, unknown>>(datasetId);
-  const posts = raw.map(normalizePost).filter((p) => p.ownerUsername);
-  console.log(`[apify] Location scraper returned ${posts.length} posts`);
+  const posts = await fetchDataset<HashtagPost>(datasetId);
+  console.log(`[apify] Miami Discovery returned ${posts.length} posts`);
   return posts;
 }
 
