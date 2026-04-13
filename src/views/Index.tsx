@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type KeyboardEvent } from "react";
-import { Search, SlidersHorizontal, Hash, Loader2, AlertCircle, Sparkles, MapPin, Users } from "lucide-react";
+import { Search, SlidersHorizontal, Hash, Loader2, AlertCircle, Sparkles, MapPin, Users, Music2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,12 @@ import HashtagAnalysisPanel from "@/components/HashtagAnalysisPanel";
 import SavedView from "@/views/SavedView";
 import { useSearch } from "@/hooks/useSearch";
 import { useDiscovery } from "@/hooks/useDiscovery";
+import { useTikTokToIG } from "@/hooks/useTikTokToIG";
 import { useHashtagAnalysis } from "@/hooks/useHashtagAnalysis";
 
-type SearchMode = 'hashtag' | 'discovery';
+const DEFAULT_TIKTOK_HASHTAGS = 'miami, miamilifestyle, miamifashion, miamimom, wynwood';
+
+type SearchMode = 'hashtag' | 'discovery' | 'tiktok';
 
 const Index = () => {
   const [activeView, setActiveView]     = useState<NavView>('Search');
@@ -25,6 +28,9 @@ const Index = () => {
 
   // Discovery mode state
   const [seedInput, setSeedInput]       = useState("");
+
+  // TikTok mode state
+  const [tiktokInput, setTiktokInput]   = useState(DEFAULT_TIKTOK_HASHTAGS);
 
   // Shared result controls
   const [filter, setFilter]             = useState("");
@@ -42,12 +48,18 @@ const Index = () => {
     reset: resetDiscover,
   } = useDiscovery();
 
+  const {
+    mutate: runTikTok, data: tiktokResult,
+    isPending: isTikToking, isError: isTikTokError, error: tiktokError,
+    reset: resetTikTok,
+  } = useTikTokToIG();
+
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
 
-  const isPending  = isSearching || isDiscovering;
-  const isError    = searchMode === 'hashtag' ? isSearchError : isDiscoverError;
-  const activeError = searchMode === 'hashtag' ? searchError  : discoverError;
-  const activeResult = searchMode === 'hashtag' ? searchResult : discoverResult;
+  const isPending   = isSearching || isDiscovering || isTikToking;
+  const isError     = searchMode === 'hashtag' ? isSearchError : searchMode === 'discovery' ? isDiscoverError : isTikTokError;
+  const activeError = searchMode === 'hashtag' ? searchError   : searchMode === 'discovery' ? discoverError   : tiktokError;
+  const activeResult = searchMode === 'hashtag' ? searchResult : searchMode === 'discovery' ? discoverResult  : tiktokResult;
   const allInfluencers: Influencer[] = activeResult?.influencers ?? [];
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -75,6 +87,16 @@ const Index = () => {
     runDiscover({ seeds: parseSeeds() });
   };
 
+  const parseTikTokTags = () =>
+    tiktokInput
+      .split(/[\s,]+/)
+      .map((t) => t.replace(/^#/, '').trim())
+      .filter(Boolean);
+
+  const handleTikTok = () => {
+    runTikTok({ hashtags: parseTikTokTags() });
+  };
+
   const handleAnalyze = () => {
     const tags = parseTags();
     if (tags.length === 0) return;
@@ -95,6 +117,7 @@ const Index = () => {
     setFilter("");
     resetSearch();
     resetDiscover();
+    resetTikTok();
     resetAnalysis();
   };
 
@@ -127,11 +150,13 @@ const Index = () => {
   // ── Status text ───────────────────────────────────────────────────────────
 
   const statusText = isPending
-    ? searchMode === 'hashtag' ? "Searching Instagram…" : "Scanning Miami locations…"
+    ? searchMode === 'hashtag'   ? "Searching Instagram…"
+    : searchMode === 'discovery' ? "Scanning Miami locations…"
+    :                              "Searching TikTok → cross-referencing Instagram…"
     : !activeResult
-    ? searchMode === 'hashtag'
-      ? "Enter hashtags to search for influencers"
-      : "Click Discover to scan Miami locations for influencers"
+    ? searchMode === 'hashtag'   ? "Enter hashtags to search for influencers"
+    : searchMode === 'discovery' ? "Click Discover to scan Miami locations for influencers"
+    :                              "Click Search to find Miami influencers via TikTok"
     : `${displayed.length} influencer${displayed.length !== 1 ? "s" : ""} found`;
 
   return (
@@ -159,6 +184,10 @@ const Index = () => {
                   <TabsTrigger value="discovery" className="gap-1.5 text-xs px-3">
                     <MapPin className="w-3.5 h-3.5" />
                     Miami Discovery
+                  </TabsTrigger>
+                  <TabsTrigger value="tiktok" className="gap-1.5 text-xs px-3">
+                    <Music2 className="w-3.5 h-3.5" />
+                    TikTok → IG
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -232,6 +261,37 @@ const Index = () => {
               </div>
             )}
 
+            {searchMode === 'tiktok' && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                  <Music2 className="w-3.5 h-3.5" />
+                  <span>TikTok hashtags</span>
+                </div>
+                <div className="relative flex-1">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="miami, miamilifestyle, miamifashion..."
+                    value={tiktokInput}
+                    onChange={(e) => setTiktokInput(e.target.value)}
+                    disabled={isPending}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                  />
+                </div>
+                <Button
+                  onClick={handleTikTok}
+                  disabled={isPending || !tiktokInput.trim()}
+                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {isTikToking ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
+                  ) : (
+                    <><Music2 className="w-4 h-4 mr-2" /> Search</>
+                  )}
+                </Button>
+              </div>
+            )}
+
             {searchMode === 'discovery' && (
               <div className="flex items-center gap-3">
                 {/* Preset badges */}
@@ -281,7 +341,7 @@ const Index = () => {
             <div className="mb-5 flex items-end justify-between">
               <div>
                 <h1 className="text-xl font-semibold text-foreground">
-                  {searchMode === 'hashtag' ? 'Hashtag Search' : 'Miami Discovery'}
+                  {searchMode === 'hashtag' ? 'Hashtag Search' : searchMode === 'discovery' ? 'Miami Discovery' : 'TikTok → Instagram'}
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">{statusText}</p>
               </div>
@@ -302,6 +362,18 @@ const Index = () => {
                 result={analysisResult}
                 onAddSuggestion={handleAddSuggestion}
               />
+            )}
+
+            {searchMode === 'tiktok' && !isPending && !activeResult && (
+              <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-2">Cómo funciona TikTok → Instagram</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Busca en TikTok por los hashtags ingresados y extrae los autores únicos</li>
+                  <li>Cruza esos usernames contra Instagram (mismo handle en ambas plataformas ~80% del tiempo)</li>
+                  <li>Filtra por 30K–100K seguidores en Instagram</li>
+                  <li>Gemini verifica género · edad 25-60 · Miami y puntúa cada perfil</li>
+                </ul>
+              </div>
             )}
 
             {searchMode === 'discovery' && !isPending && !activeResult && (

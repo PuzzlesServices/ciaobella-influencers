@@ -51,6 +51,10 @@ export interface DiscoverRequest {
   seeds?: string[];   // optional known Miami influencer handles
 }
 
+export interface TikTokRequest {
+  hashtags?: string[];  // TikTok hashtags to search (defaults to Miami preset)
+}
+
 export interface SearchResponse {
   influencers: ScoredInfluencer[];
   stats: {

@@ -44,6 +44,17 @@ const CAPTION_SALE_KEYWORDS = [
 const NON_LATIN_RE =
   /[\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u4E00-\u9FFF\u0370-\u03FF\u0400-\u04FF\uAC00-\uD7AF]/;
 
+// Applies only username-level blocklists — used when post content isn't available (e.g. TikTok sourced usernames)
+export function filterUsernames(usernames: string[]): string[] {
+  return usernames.filter((u) => {
+    const key = u.toLowerCase();
+    if (USERNAME_BLOCKLIST.some((kw) => key.includes(kw))) return false;
+    if (USERNAME_SUFFIX_BLOCKLIST.some((s) => key.includes(s))) return false;
+    if (LUXURY_NUM_RE.test(key)) return false;
+    return true;
+  });
+}
+
 export function preFilter(posts: HashtagPost[]): string[] {
   const passed = new Map<string, string>();
 

@@ -128,6 +128,54 @@ export async function scrapeByMiamiLocations(limit: number): Promise<HashtagPost
   return posts;
 }
 
+// ── TikTok scraper ──────────────────────────────────────────────────────────
+// Returns unique author usernames from TikTok posts matching the given hashtags.
+// These usernames are then cross-referenced against Instagram profiles.
+
+interface TikTokRawPost {
+  authorMeta?: { name?: string; nickName?: string };
+  author?:     string | { uniqueId?: string };
+  text?:       string;
+  desc?:       string;
+}
+
+export async function scrapeByTikTok(hashtags: string[], limit: number): Promise<string[]> {
+  const perHashtag = Math.ceil(limit / hashtags.length);
+  console.log(`[apify] TikTok scraper — hashtags: [${hashtags.join(', ')}], ~${perHashtag} per tag`);
+
+  const datasetId = await startAndWait('clockworks~tiktok-scraper', {
+    hashtags,
+    resultsPerPage:             perHashtag,
+    shouldDownloadVideos:       false,
+    shouldDownloadCovers:       false,
+    shouldDownloadSubtitles:    false,
+    shouldDownloadSlideshowImages: false,
+  });
+
+  const posts = await fetchDataset<TikTokRawPost>(datasetId);
+  console.log(`[apify] TikTok scraper returned ${posts.length} posts`);
+
+  // Extract unique usernames — handle both scraper output shapes
+  const seen = new Set<string>();
+  for (const post of posts) {
+    let username: string | undefined;
+
+    if (post.authorMeta?.name) {
+      username = post.authorMeta.name;
+    } else if (typeof post.author === 'string') {
+      username = post.author;
+    } else if (typeof post.author === 'object' && post.author?.uniqueId) {
+      username = post.author.uniqueId;
+    }
+
+    if (username) seen.add(username.replace(/^@/, '').toLowerCase());
+  }
+
+  const usernames = Array.from(seen);
+  console.log(`[apify] TikTok scraper → ${usernames.length} unique authors`);
+  return usernames;
+}
+
 export async function scrapeUserPosts(username: string, limit = 5): Promise<UserPost[]> {
   console.log(`[apify] Post scraper — @${username}, limit: ${limit}`);
 
