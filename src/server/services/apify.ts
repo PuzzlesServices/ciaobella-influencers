@@ -52,12 +52,17 @@ async function fetchDataset<T>(datasetId: string): Promise<T[]> {
   return (Array.isArray(data) ? data : data.items ?? []) as T[];
 }
 
-export async function scrapeHashtags(hashtags: string[], limitPerHashtag: number): Promise<HashtagPost[]> {
-  console.log(`[apify] Hashtag scraper — hashtags: [${hashtags.join(', ')}], limit: ${limitPerHashtag} each`);
+export async function scrapeHashtags(
+  hashtags: string[],
+  limitPerHashtag: number,
+  resultsType: 'posts' | 'reels' = 'posts',
+): Promise<HashtagPost[]> {
+  console.log(`[apify] Hashtag scraper — hashtags: [${hashtags.join(', ')}], limit: ${limitPerHashtag} each, type: ${resultsType}`);
 
   const datasetId = await startAndWait('apify~instagram-hashtag-scraper', {
     hashtags,
     resultsLimit: limitPerHashtag,
+    resultsType,
   });
 
   const posts = await fetchDataset<HashtagPost>(datasetId);

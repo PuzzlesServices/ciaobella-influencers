@@ -24,7 +24,9 @@ const Index = () => {
   const [searchMode, setSearchMode]     = useState<SearchMode>('hashtag');
 
   // Hashtag mode state
-  const [hashtagInput, setHashtagInput] = useState("");
+  const [hashtagInput, setHashtagInput]   = useState("");
+  const [mediaType, setMediaType]         = useState<'posts' | 'reels'>('posts');
+  const [postsLimit, setPostsLimit]       = useState<number>(100);
 
   // Discovery mode state
   const [seedInput, setSeedInput]       = useState("");
@@ -83,7 +85,7 @@ const Index = () => {
     const tags = parseTags();
     if (tags.length === 0) return;
     resetAnalysis();
-    runSearch({ hashtags: tags });
+    runSearch({ hashtags: tags, resultsType: mediaType, postsLimit });
   };
 
   const handleDiscover = () => {
@@ -221,42 +223,83 @@ const Index = () => {
 
             {/* Row 2: mode-specific search controls */}
             {searchMode === 'hashtag' && (
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="miamiinfluencer, miamiblogger..."
-                    value={hashtagInput}
-                    onChange={(e) => setHashtagInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    disabled={isPending}
-                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
-                  />
+              <div className="flex flex-col gap-2">
+                {/* Input row */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="miamiinfluencer, miamiblogger..."
+                      value={hashtagInput}
+                      onChange={(e) => setHashtagInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      disabled={isPending}
+                      className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing || isPending || !hashtagInput.trim()}
+                    variant="outline"
+                    className="shrink-0"
+                  >
+                    {isAnalyzing ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing…</>
+                    ) : (
+                      <><Sparkles className="w-4 h-4 mr-2" /> Analyze</>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleSearch}
+                    disabled={isPending || !hashtagInput.trim()}
+                    className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    {isSearching ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
+                    ) : (
+                      <><Search className="w-4 h-4 mr-2" /> Search</>
+                    )}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing || isPending || !hashtagInput.trim()}
-                  variant="outline"
-                  className="shrink-0"
-                >
-                  {isAnalyzing ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing…</>
-                  ) : (
-                    <><Sparkles className="w-4 h-4 mr-2" /> Analyze</>
-                  )}
-                </Button>
-                <Button
-                  onClick={handleSearch}
-                  disabled={isPending || !hashtagInput.trim()}
-                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  {isSearching ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
-                  ) : (
-                    <><Search className="w-4 h-4 mr-2" /> Search</>
-                  )}
-                </Button>
+                {/* Options row */}
+                <div className="flex items-center gap-3">
+                  {/* Posts / Reels toggle */}
+                  <div className="flex items-center rounded-md border border-input overflow-hidden text-xs shrink-0">
+                    <button
+                      onClick={() => setMediaType('posts')}
+                      disabled={isPending}
+                      className={`px-3 py-1.5 transition-colors ${mediaType === 'posts' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                    >
+                      Posts
+                    </button>
+                    <button
+                      onClick={() => setMediaType('reels')}
+                      disabled={isPending}
+                      className={`px-3 py-1.5 transition-colors ${mediaType === 'reels' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                    >
+                      Reels
+                    </button>
+                  </div>
+                  {/* Posts limit */}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                    <span>Limit:</span>
+                    <select
+                      value={postsLimit}
+                      onChange={(e) => setPostsLimit(Number(e.target.value))}
+                      disabled={isPending}
+                      className="bg-background border border-input rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    >
+                      <option value={50}>50 posts</option>
+                      <option value={100}>100 posts</option>
+                      <option value={200}>200 posts</option>
+                      <option value={300}>300 posts</option>
+                    </select>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    More posts → more unique authors → more candidates for AI
+                  </span>
+                </div>
               </div>
             )}
 

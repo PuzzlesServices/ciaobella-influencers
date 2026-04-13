@@ -11,10 +11,10 @@ export const maxDuration = 300;
 
 // ── Preset campaign filters (Monisha Melwani) ───────────────────────────────
 const PRESET = {
-  postsLimit:      50,
-  genderAllowed:   ['female', 'unknown'] as string[],
-  ageAllowed:      ['25-34', '35-44', '45-60', 'unknown'] as string[],
-  targetCity:      'miami',
+  postsLimitDefault: 100,
+  genderAllowed:     ['female', 'unknown'] as string[],
+  ageAllowed:        ['25-34', '35-44', '45-60', 'unknown'] as string[],
+  targetCity:        'miami',
 };
 
 function passesPresetFilter(s: ScoredInfluencer): boolean {
@@ -36,18 +36,19 @@ function passesPresetFilter(s: ScoredInfluencer): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    const { hashtags: rawHashtags }: SearchRequest = await req.json();
+    const { hashtags: rawHashtags, resultsType = 'posts', postsLimit }: SearchRequest = await req.json();
 
     if (!rawHashtags || (Array.isArray(rawHashtags) && rawHashtags.length === 0)) {
       return NextResponse.json({ error: 'hashtags is required' }, { status: 400 });
     }
 
-    const hashtagList = Array.isArray(rawHashtags) ? rawHashtags : [rawHashtags];
-    const limitPerHashtag = Math.ceil(PRESET.postsLimit / hashtagList.length);
+    const hashtagList     = Array.isArray(rawHashtags) ? rawHashtags : [rawHashtags];
+    const totalLimit      = postsLimit ?? PRESET.postsLimitDefault;
+    const limitPerHashtag = Math.ceil(totalLimit / hashtagList.length);
 
     // ── PASO 2: Apify Hashtag Scraper ──────────────────────────────────────
-    console.log(`\n[search] ── PASO 2: Hashtag scraper (${PRESET.postsLimit} posts, ${limitPerHashtag}/hashtag)`);
-    const posts = await scrapeHashtags(hashtagList, limitPerHashtag);
+    console.log(`\n[search] ── PASO 2: Hashtag scraper (${totalLimit} posts, ${limitPerHashtag}/hashtag, type: ${resultsType})`);
+    const posts = await scrapeHashtags(hashtagList, limitPerHashtag, resultsType);
 
     // ── PASO 3: Pre-filtro local ───────────────────────────────────────────
     console.log(`[search] ── PASO 3: Pre-filtro`);

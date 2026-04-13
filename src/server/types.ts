@@ -45,6 +45,8 @@ export interface UserPost {
 export interface SearchRequest {
   hashtags: string | string[];
   maxResults?: number;
+  resultsType?: 'posts' | 'reels';
+  postsLimit?: number;
 }
 
 export interface DiscoverRequest {

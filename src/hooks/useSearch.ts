@@ -69,11 +69,19 @@ export interface SearchResult {
   stats: SearchStats;
 }
 
-async function runSearch({ hashtags }: { hashtags: string[] }): Promise<SearchResult> {
+async function runSearch({
+  hashtags,
+  resultsType,
+  postsLimit,
+}: {
+  hashtags: string[];
+  resultsType?: 'posts' | 'reels';
+  postsLimit?: number;
+}): Promise<SearchResult> {
   const res = await fetch('/api/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hashtags }),
+    body: JSON.stringify({ hashtags, resultsType, postsLimit }),
   });
 
   if (!res.ok) {
