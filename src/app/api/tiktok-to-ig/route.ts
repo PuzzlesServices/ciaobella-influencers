@@ -13,7 +13,7 @@ const DEFAULT_HASHTAGS = [
   'miami', 'miamilifestyle', 'miamifashion', 'miamimom', 'wynwood',
 ];
 
-const TIKTOK_POSTS_LIMIT = 100; // more posts → more unique authors to cross-ref
+const TIKTOK_POSTS_LIMIT = 50; // more posts → more unique authors to cross-ref
 
 // ── Preset campaign filters (Monisha Melwani) ───────────────────────────────
 const PRESET = {

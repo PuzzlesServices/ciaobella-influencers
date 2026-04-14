@@ -10,7 +10,7 @@ const DEFAULT_HASHTAGS = [
   'miami', 'miamilifestyle', 'miamifashion', 'miamimom', 'wynwood',
 ];
 
-const POSTS_LIMIT = 150;
+const POSTS_LIMIT = 50;
 
 // Min thresholds to qualify as a creator worth evaluating
 const MIN_FOLLOWERS  = 10_000;
