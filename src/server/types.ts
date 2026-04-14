@@ -57,6 +57,34 @@ export interface TikTokRequest {
   hashtags?: string[];  // TikTok hashtags to search (defaults to Miami preset)
 }
 
+export interface TikTokCreator {
+  username: string;
+  nickname: string;
+  bio: string;
+  followersCount: number;
+  videosCount: number;
+  profilePicUrl?: string;
+  avgViews: number;
+  avgLikes: number;
+  avgComments: number;
+  engagementRate: number;
+  topCaptions: string[];
+}
+
+export interface ScoredTikTokCreator extends TikTokCreator {
+  score: number;
+  label: 'High Match' | 'Medium Match' | 'Low Match';
+  reason: string;
+  niche: string;
+  gender?: 'female' | 'male' | 'unknown';
+  estimatedAge?: string;
+  inferredCity?: string;
+}
+
+export interface TikTokNativeRequest {
+  hashtags?: string[];
+}
+
 export interface SearchResponse {
   influencers: ScoredInfluencer[];
   stats: {

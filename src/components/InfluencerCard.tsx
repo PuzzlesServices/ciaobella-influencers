@@ -21,6 +21,7 @@ export interface Influencer {
   profileUrl: string;
   profilePicUrl?: string;
   location?: string;
+  platform?: 'instagram' | 'tiktok';
 }
 
 function EngagementLabel({ rate }: { rate: number }) {
@@ -49,6 +50,7 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
   const { mutate: scrapeEngagement, isPending: isScraping } = useEngagementScrape();
 
   const rawUsername = influencer.username.replace(/^@/, '');
+  const isTikTok = influencer.platform === 'tiktok';
 
   const handleSave = () => {
     if (isSaved) return;
@@ -135,20 +137,22 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
                     {viralPosts} viral
                   </span>
                 )}
-                <button
-                  onClick={handleCalculateEngagement}
-                  disabled={isScraping}
-                  title={hasCachedEngagement ? 'Recalculate from last 5 posts' : 'Calculate from last 5 posts'}
-                  className="inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                >
-                  {isScraping ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <BarChart2 className="w-3 h-3" />
-                  )}
-                </button>
+                {!isTikTok && (
+                  <button
+                    onClick={handleCalculateEngagement}
+                    disabled={isScraping}
+                    title={hasCachedEngagement ? 'Recalculate from last 5 posts' : 'Calculate from last 5 posts'}
+                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                  >
+                    {isScraping ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <BarChart2 className="w-3 h-3" />
+                    )}
+                  </button>
+                )}
               </div>
-            ) : (
+            ) : !isTikTok ? (
               <button
                 onClick={handleCalculateEngagement}
                 disabled={isScraping}
@@ -160,7 +164,7 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
                   <><BarChart2 className="w-3 h-3" /> Calculate</>
                 )}
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -199,7 +203,7 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
           variant="outline"
           size="icon"
           className="shrink-0"
-          title="View Instagram profile"
+          title={isTikTok ? 'View TikTok profile' : 'View Instagram profile'}
         >
           <ExternalLink className="w-4 h-4" />
         </Button>

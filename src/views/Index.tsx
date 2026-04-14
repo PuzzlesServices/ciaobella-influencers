@@ -13,11 +13,12 @@ import SavedView from "@/views/SavedView";
 import { useSearch } from "@/hooks/useSearch";
 import { useDiscovery } from "@/hooks/useDiscovery";
 import { useTikTokToIG } from "@/hooks/useTikTokToIG";
+import { useTikTokNative } from "@/hooks/useTikTokNative";
 import { useHashtagAnalysis } from "@/hooks/useHashtagAnalysis";
 
 const DEFAULT_TIKTOK_HASHTAGS = 'miami, miamilifestyle, miamifashion, miamimom, wynwood';
 
-type SearchMode = 'hashtag' | 'discovery' | 'tiktok';
+type SearchMode = 'hashtag' | 'discovery' | 'tiktok' | 'tiktok-native';
 
 const Index = () => {
   const [activeView, setActiveView]     = useState<NavView>('Search');
@@ -31,8 +32,11 @@ const Index = () => {
   // Discovery mode state
   const [seedInput, setSeedInput]       = useState("");
 
-  // TikTok mode state
+  // TikTok → IG mode state
   const [tiktokInput, setTiktokInput]   = useState(DEFAULT_TIKTOK_HASHTAGS);
+
+  // TikTok native mode state
+  const [tiktokNativeInput, setTiktokNativeInput] = useState(DEFAULT_TIKTOK_HASHTAGS);
 
   // Shared result controls
   const [filter, setFilter]             = useState("");
@@ -57,12 +61,27 @@ const Index = () => {
     reset: resetTikTok,
   } = useTikTokToIG();
 
+  const {
+    mutate: runTikTokNative, data: tiktokNativeResult,
+    isPending: isTikTokingNative, isError: isTikTokNativeError, error: tiktokNativeError,
+    reset: resetTikTokNative,
+  } = useTikTokNative();
+
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
 
-  const isPending   = isSearching || isDiscovering || isTikToking;
-  const isError     = searchMode === 'hashtag' ? isSearchError : searchMode === 'discovery' ? isDiscoverError : isTikTokError;
-  const activeError = searchMode === 'hashtag' ? searchError   : searchMode === 'discovery' ? discoverError   : tiktokError;
-  const activeResult = searchMode === 'hashtag' ? searchResult : searchMode === 'discovery' ? discoverResult  : tiktokResult;
+  const isPending   = isSearching || isDiscovering || isTikToking || isTikTokingNative;
+  const isError     = searchMode === 'hashtag'       ? isSearchError
+                    : searchMode === 'discovery'     ? isDiscoverError
+                    : searchMode === 'tiktok'        ? isTikTokError
+                    :                                  isTikTokNativeError;
+  const activeError = searchMode === 'hashtag'       ? searchError
+                    : searchMode === 'discovery'     ? discoverError
+                    : searchMode === 'tiktok'        ? tiktokError
+                    :                                  tiktokNativeError;
+  const activeResult = searchMode === 'hashtag'      ? searchResult
+                     : searchMode === 'discovery'    ? discoverResult
+                     : searchMode === 'tiktok'       ? tiktokResult
+                     :                                 tiktokNativeResult;
   const allInfluencers: Influencer[] = showAll
     ? (activeResult?.allProfiled ?? [])
     : (activeResult?.influencers ?? []);
@@ -100,6 +119,16 @@ const Index = () => {
 
   const handleTikTok = () => {
     runTikTok({ hashtags: parseTikTokTags() });
+  };
+
+  const parseTikTokNativeTags = () =>
+    tiktokNativeInput
+      .split(/[\s,]+/)
+      .map((t) => t.replace(/^#/, '').trim())
+      .filter(Boolean);
+
+  const handleTikTokNative = () => {
+    runTikTokNative({ hashtags: parseTikTokNativeTags() });
   };
 
   const handleAnalyze = () => {
@@ -152,14 +181,16 @@ const Index = () => {
   // ── Status text ───────────────────────────────────────────────────────────
 
   const statusText = isPending
-    ? searchMode === 'hashtag'   ? "Searching Instagram…"
-    : searchMode === 'discovery' ? "Scanning Miami locations…"
-    :                              "Searching TikTok → cross-referencing Instagram…"
+    ? searchMode === 'hashtag'        ? "Searching Instagram…"
+    : searchMode === 'discovery'      ? "Scanning Miami locations…"
+    : searchMode === 'tiktok'         ? "Searching TikTok → cross-referencing Instagram…"
+    :                                   "Scraping TikTok videos and scoring creators…"
     : !activeResult
-    ? searchMode === 'hashtag'   ? "Enter hashtags to search for influencers"
-    : searchMode === 'discovery' ? "Click Discover to scan Miami locations for influencers"
-    :                              "Click Search to find Miami influencers via TikTok"
-    : `${displayed.length} influencer${displayed.length !== 1 ? "s" : ""} found`;
+    ? searchMode === 'hashtag'        ? "Enter hashtags to search for influencers"
+    : searchMode === 'discovery'      ? "Click Discover to scan Miami locations for influencers"
+    : searchMode === 'tiktok'         ? "Click Search to find Miami influencers via TikTok"
+    :                                   "Enter hashtags to find viral TikTok creators"
+    : `${displayed.length} creator${displayed.length !== 1 ? "s" : ""} found`;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -189,6 +220,10 @@ const Index = () => {
                   <TabsTrigger value="tiktok" className="gap-1.5 text-xs px-3">
                     <Music2 className="w-3.5 h-3.5" />
                     TikTok → IG
+                  </TabsTrigger>
+                  <TabsTrigger value="tiktok-native" className="gap-1.5 text-xs px-3">
+                    <Music2 className="w-3.5 h-3.5" />
+                    TikTok
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -334,6 +369,37 @@ const Index = () => {
               </div>
             )}
 
+            {searchMode === 'tiktok-native' && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                  <Music2 className="w-3.5 h-3.5" />
+                  <span>TikTok hashtags</span>
+                </div>
+                <div className="relative flex-1">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="miami, miamilifestyle, miamifashion..."
+                    value={tiktokNativeInput}
+                    onChange={(e) => setTiktokNativeInput(e.target.value)}
+                    disabled={isPending}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                  />
+                </div>
+                <Button
+                  onClick={handleTikTokNative}
+                  disabled={isPending || !tiktokNativeInput.trim()}
+                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {isTikTokingNative ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
+                  ) : (
+                    <><Music2 className="w-4 h-4 mr-2" /> Search</>
+                  )}
+                </Button>
+              </div>
+            )}
+
             {searchMode === 'discovery' && (
               <div className="flex items-center gap-3">
                 {/* Preset badges */}
@@ -383,7 +449,7 @@ const Index = () => {
             <div className="mb-5 flex items-end justify-between">
               <div>
                 <h1 className="text-xl font-semibold text-foreground">
-                  {searchMode === 'hashtag' ? 'Hashtag Search' : searchMode === 'discovery' ? 'Miami Discovery' : 'TikTok → Instagram'}
+                  {searchMode === 'hashtag' ? 'Hashtag Search' : searchMode === 'discovery' ? 'Miami Discovery' : searchMode === 'tiktok' ? 'TikTok → Instagram' : 'TikTok Creators'}
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">{statusText}</p>
               </div>
@@ -416,7 +482,7 @@ const Index = () => {
             {activeResult && (
               <div className="text-xs text-muted-foreground leading-relaxed mb-4">
                 <span className="font-medium">{activeResult.stats.hashtagPostsFound}</span>{' '}
-                {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'discovery' ? 'location posts' : 'TikTok authors'}
+                {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'discovery' ? 'location posts' : searchMode === 'tiktok' ? 'TikTok authors' : 'TikTok videos'}
                 {" → "}<span className="font-medium">{activeResult.stats.afterPreFilter}</span> pre-filtered
                 {" → "}<span className="font-medium">{activeResult.stats.afterProfileFilter}</span> profiled
                 {" → "}<span className="font-medium">{activeResult.stats.afterPresetFilter}</span> AI-verified
@@ -433,12 +499,24 @@ const Index = () => {
 
             {searchMode === 'tiktok' && !isPending && !activeResult && (
               <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-2">Cómo funciona TikTok → Instagram</p>
+                <p className="font-medium text-foreground mb-2">How TikTok → Instagram works</p>
                 <ul className="space-y-1 list-disc list-inside">
-                  <li>Busca en TikTok por los hashtags ingresados y extrae los autores únicos</li>
-                  <li>Cruza esos usernames contra Instagram (mismo handle en ambas plataformas ~80% del tiempo)</li>
-                  <li>Filtra por 30K–100K seguidores en Instagram</li>
-                  <li>Gemini verifica género · edad 25-60 · Miami y puntúa cada perfil</li>
+                  <li>Searches TikTok by the entered hashtags and extracts unique authors</li>
+                  <li>Cross-references those usernames against Instagram (same handle on both platforms ~80% of the time)</li>
+                  <li>Filters by 30K–100K Instagram followers</li>
+                  <li>Gemini verifies gender · age 25–60 · Miami and scores each profile</li>
+                </ul>
+              </div>
+            )}
+
+            {searchMode === 'tiktok-native' && !isPending && !activeResult && (
+              <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-2">How TikTok Creators works</p>
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Scrapes TikTok videos by the entered hashtags and groups them by creator</li>
+                  <li>Calculates real engagement from video views, likes, and comments — no Instagram needed</li>
+                  <li>Filters creators with 10K+ followers and meaningful view counts</li>
+                  <li>Gemini verifies gender · age 25–60 · Miami and scores each TikTok profile</li>
                 </ul>
               </div>
             )}
