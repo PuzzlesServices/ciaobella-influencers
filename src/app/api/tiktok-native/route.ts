@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeByTikTokNative, TikTokRawPostFull } from '@/server/services/apify';
+import { scrapeByTikTokNative } from '@/server/services/apify';
+import type { TikTokRawPostFull } from '@/server/services/apify';
 import { filterUsernames } from '@/server/filters/preFilter';
 import { scoreTikTokCreator } from '@/server/services/gemini';
-import { TikTokNativeRequest, TikTokCreator, ScoredTikTokCreator } from '@/server/types';
+import type { TikTokNativeRequest, TikTokCreator, ScoredTikTokCreator } from '@/server/types';
 
 export const maxDuration = 300;
 
@@ -10,7 +11,9 @@ const DEFAULT_HASHTAGS = [
   'miami', 'miamilifestyle', 'miamifashion', 'miamimom', 'wynwood',
 ];
 
-const POSTS_LIMIT = 50;
+const POSTS_LIMIT     = 50;
+const MAX_TO_SCORE    = 8;   // cap Gemini calls to avoid timeout
+const GEMINI_DELAY_MS = 1_500;
 
 // Min thresholds to qualify as a creator worth evaluating
 const MIN_FOLLOWERS  = 10_000;
@@ -142,16 +145,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── STEP 4: Gemini scoring ─────────────────────────────────────────────
-    console.log(`[tiktok-native] ── STEP 4: Gemini scoring (${filtered.length} creators)`);
+    // ── STEP 4: Gemini scoring (capped to MAX_TO_SCORE to avoid timeout) ────
+    const toScore = filtered.slice(0, MAX_TO_SCORE);
+    console.log(`[tiktok-native] ── STEP 4: Gemini scoring (${toScore.length}/${filtered.length} creators)`);
     const scored: ScoredTikTokCreator[] = [];
-    for (const creator of filtered) {
-      const result = await scoreTikTokCreator(creator);
-      scored.push({ ...creator, ...result });
-      console.log(
-        `[tiktok-native] Scored @${creator.username} → ${result.score} | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`,
-      );
-      await new Promise((r) => setTimeout(r, 4_000));
+    for (const creator of toScore) {
+      try {
+        const result = await scoreTikTokCreator(creator);
+        scored.push({ ...creator, ...result });
+        console.log(
+          `[tiktok-native] Scored @${creator.username} → ${result.score} | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`,
+        );
+      } catch (err) {
+        console.warn(`[tiktok-native] Gemini failed for @${creator.username}, skipping:`, (err as Error).message);
+      }
+      await new Promise((r) => setTimeout(r, GEMINI_DELAY_MS));
     }
 
     // ── STEP 5: Preset filter + sort ──────────────────────────────────────
