@@ -234,6 +234,7 @@ const Index = () => {
 
               <div className="flex-1" />
 
+              {/* Filter input — hidden provisionally
               <div className="relative shrink-0 hidden sm:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
@@ -244,6 +245,7 @@ const Index = () => {
                   className="pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow w-44"
                 />
               </div>
+              */}
 
               {/* Sort select — hidden provisionally
               <div className="flex items-center gap-2 shrink-0">
