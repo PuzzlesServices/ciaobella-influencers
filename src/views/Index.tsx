@@ -245,6 +245,7 @@ const Index = () => {
                 />
               </div>
 
+              {/* Sort select — hidden provisionally
               <div className="flex items-center gap-2 shrink-0">
                 <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -258,6 +259,7 @@ const Index = () => {
                   </SelectContent>
                 </Select>
               </div>
+              */}
             </div>
 
             {/* Row 2: mode-specific search controls */}
