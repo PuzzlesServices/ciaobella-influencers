@@ -54,7 +54,18 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
 
   const handleSave = () => {
     if (isSaved) return;
-    save(rawUsername, { onSuccess: () => setIsSaved(true) });
+    save(
+      {
+        username:      rawUsername,
+        name:          influencer.name,
+        profilePicUrl: influencer.profilePicUrl,
+        followersRaw:  influencer.followersRaw,
+        engagementRaw: influencer.engagementRaw,
+        matchScore:    influencer.matchScore,
+        niche:         influencer.niche,
+      },
+      { onSuccess: () => setIsSaved(true) }
+    );
   };
 
   const handleUnsave = () => {

@@ -9,14 +9,14 @@ const MatchRing = ({ score, size = 64 }: MatchRingProps) => {
   const offset = circumference - (score / 100) * circumference;
 
   const colorClass =
-    score >= 80
+    score >= 70
       ? "text-match-high"
       : score >= 50
         ? "text-match-medium"
         : "text-match-low";
 
   const strokeColor =
-    score >= 80
+    score >= 70
       ? "hsl(var(--match-high))"
       : score >= 50
         ? "hsl(var(--match-medium))"

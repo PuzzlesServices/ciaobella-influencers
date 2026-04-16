@@ -16,17 +16,17 @@ import { useTikTokToIG } from "@/hooks/useTikTokToIG";
 import { useTikTokNative } from "@/hooks/useTikTokNative";
 import { useHashtagAnalysis } from "@/hooks/useHashtagAnalysis";
 
-const DEFAULT_TIKTOK_HASHTAGS = 'miami, miamilifestyle, miamifashion, miamimom, wynwood';
+const DEFAULT_TIKTOK_HASHTAGS = 'miamiinfluencer';
 
 type SearchMode = 'hashtag' | 'discovery' | 'tiktok' | 'tiktok-native';
 
 const Index = () => {
   const [activeView, setActiveView]     = useState<NavView>('Search');
-  const [searchMode, setSearchMode]     = useState<SearchMode>('hashtag');
+  const [searchMode, setSearchMode]     = useState<SearchMode>('tiktok');
 
   // Hashtag mode state
   const [hashtagInput, setHashtagInput]   = useState("");
-  const [mediaType, setMediaType]         = useState<'posts' | 'reels'>('posts');
+  const [mediaType, setMediaType]         = useState<'posts' | 'reels'>('reels');
   const [postsLimit, setPostsLimit]       = useState<number>(100);
 
   // Discovery mode state
@@ -209,17 +209,21 @@ const Index = () => {
             <div className="flex items-center gap-3">
               <Tabs value={searchMode} onValueChange={handleModeChange} className="shrink-0">
                 <TabsList>
-                  <TabsTrigger value="hashtag" className="gap-1.5 text-xs px-3">
-                    <Hash className="w-3.5 h-3.5" />
-                    Hashtag
-                  </TabsTrigger>
-                  <TabsTrigger value="discovery" className="gap-1.5 text-xs px-3">
-                    <MapPin className="w-3.5 h-3.5" />
-                    Miami Discovery
-                  </TabsTrigger>
                   <TabsTrigger value="tiktok" className="gap-1.5 text-xs px-3">
                     <Music2 className="w-3.5 h-3.5" />
                     TikTok → IG
+                  </TabsTrigger>
+                   <TabsTrigger value="discovery" className="gap-1.5 text-xs px-3">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Miami Discovery
+                  </TabsTrigger>
+                  <TabsTrigger value="hashtag" className="gap-1.5 text-xs px-3">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37Z" />
+                      <circle cx="17.5" cy="6.5" r="1.5" />
+                    </svg>
+                    Instagram
                   </TabsTrigger>
                   <TabsTrigger value="tiktok-native" className="gap-1.5 text-xs px-3">
                     <Music2 className="w-3.5 h-3.5" />
@@ -299,21 +303,21 @@ const Index = () => {
                 </div>
                 {/* Options row */}
                 <div className="flex items-center gap-3">
-                  {/* Posts / Reels toggle */}
+                  {/* Reels / Posts toggle */}
                   <div className="flex items-center rounded-md border border-input overflow-hidden text-xs shrink-0">
-                    <button
-                      onClick={() => setMediaType('posts')}
-                      disabled={isPending}
-                      className={`px-3 py-1.5 transition-colors ${mediaType === 'posts' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
-                    >
-                      Posts
-                    </button>
                     <button
                       onClick={() => setMediaType('reels')}
                       disabled={isPending}
                       className={`px-3 py-1.5 transition-colors ${mediaType === 'reels' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
                     >
                       Reels
+                    </button>
+                    <button
+                      onClick={() => setMediaType('posts')}
+                      disabled={isPending}
+                      className={`px-3 py-1.5 transition-colors ${mediaType === 'posts' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'}`}
+                    >
+                      Posts
                     </button>
                   </div>
                   {/* Posts limit */}

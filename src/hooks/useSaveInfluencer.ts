@@ -1,10 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Influencer } from '@/components/InfluencerCard';
 
-async function saveInfluencer(username: string): Promise<void> {
+type SavePayload = Pick<Influencer, 'username' | 'name' | 'profilePicUrl' | 'followersRaw' | 'engagementRaw' | 'matchScore' | 'niche'>;
+
+async function saveInfluencer(payload: SavePayload): Promise<void> {
   const res = await fetch('/api/save-influencer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
