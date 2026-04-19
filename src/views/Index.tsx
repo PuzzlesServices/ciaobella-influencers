@@ -211,7 +211,7 @@ const Index = () => {
                 <TabsList>
                   <TabsTrigger value="tiktok" className="gap-1.5 text-xs px-3">
                     <Music2 className="w-3.5 h-3.5" />
-                    TikTok → IG
+                    TikTok → IG!
                   </TabsTrigger>
                    <TabsTrigger value="discovery" className="gap-1.5 text-xs px-3">
                     <MapPin className="w-3.5 h-3.5" />
