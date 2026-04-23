@@ -49,8 +49,18 @@ export interface SearchRequest {
   postsLimit?: number;
 }
 
+export interface DiscoverFilters {
+  gender?: 'female' | 'male' | 'any';
+  ageMin?: number;         // e.g. 25
+  ageMax?: number;         // e.g. 60
+  followersMin?: number;   // actual count, e.g. 30000
+  followersMax?: number;   // actual count, e.g. 100000
+  city?: string;
+}
+
 export interface DiscoverRequest {
-  seeds?: string[];   // optional known Miami influencer handles
+  seeds?: string[];
+  filters?: DiscoverFilters;
 }
 
 export interface TikTokRequest {

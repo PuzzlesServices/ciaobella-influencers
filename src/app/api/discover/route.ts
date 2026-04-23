@@ -4,38 +4,57 @@ import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { DiscoverRequest, ScoredInfluencer } from '@/server/types';
+import { DiscoverRequest, DiscoverFilters, ScoredInfluencer } from '@/server/types';
 
 export const maxDuration = 300;
 
-// ── Preset campaign filters (Monisha Melwani) ───────────────────────────────
-const PRESET = {
-  locationPostsLimit: 50,
-  genderAllowed:      ['female', 'unknown'] as string[],
-  ageAllowed:         ['25-34', '35-44', '45-60', 'unknown'] as string[],
-  targetCity:         'miami',
-};
+const LOCATION_POSTS_LIMIT = 50;
 
-function passesPresetFilter(s: ScoredInfluencer): boolean {
-  if (s.gender && !PRESET.genderAllowed.includes(s.gender)) return false;
-  if (s.estimatedAge && !PRESET.ageAllowed.includes(s.estimatedAge)) return false;
-  const city = (s.inferredCity ?? '').toLowerCase().trim();
-  if (city && city !== 'unknown' && !city.includes(PRESET.targetCity)) return false;
-  if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
-  return true;
+function resolveGenderAllowed(gender?: DiscoverFilters['gender']): string[] {
+  if (!gender || gender === 'any') return ['female', 'male', 'unknown'];
+  if (gender === 'male') return ['male', 'unknown'];
+  return ['female', 'unknown'];
+}
+
+function resolveAgeBuckets(min = 25, max = 60): string[] {
+  const buckets: string[] = ['unknown'];
+  if (min <= 24) buckets.push('under25');
+  if (min <= 34 && max >= 25) buckets.push('25-34');
+  if (min <= 44 && max >= 35) buckets.push('35-44');
+  if (min <= 60 && max >= 45) buckets.push('45-60');
+  if (max > 60) buckets.push('over60');
+  return buckets;
+}
+
+function buildPassesFilter(genderAllowed: string[], ageAllowed: string[], targetCity: string) {
+  return function passesFilter(s: ScoredInfluencer): boolean {
+    if (s.gender && !genderAllowed.includes(s.gender)) return false;
+    if (s.estimatedAge && !ageAllowed.includes(s.estimatedAge)) return false;
+    const city = (s.inferredCity ?? '').toLowerCase().trim();
+    if (city && city !== 'unknown' && !city.includes(targetCity)) return false;
+    if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
+    return true;
+  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { seeds = [] }: DiscoverRequest = await req.json();
+    const { seeds = [], filters }: DiscoverRequest = await req.json();
+
+    const followersMin  = filters?.followersMin ?? 30_000;
+    const followersMax  = filters?.followersMax ?? 100_000;
+    const targetCity    = (filters?.city ?? 'miami').toLowerCase().trim();
+    const genderAllowed = resolveGenderAllowed(filters?.gender);
+    const ageAllowed    = resolveAgeBuckets(filters?.ageMin, filters?.ageMax);
+    const passesFilter  = buildPassesFilter(genderAllowed, ageAllowed, targetCity);
 
     const cleanedSeeds = seeds
       .map((s) => s.replace(/^@/, '').trim())
       .filter(Boolean);
 
-    // ── PASO 2: Scrape Miami location posts ─────────────────────────────────
-    console.log(`\n[discover] ── PASO 2: Miami location scraper (${PRESET.locationPostsLimit} posts)`);
-    const posts = await scrapeByMiamiLocations(PRESET.locationPostsLimit);
+    // ── PASO 2: Scrape location posts ───────────────────────────────────────
+    console.log(`\n[discover] ── PASO 2: location scraper (${LOCATION_POSTS_LIMIT} posts, city: ${targetCity})`);
+    const posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT);
 
     // ── PASO 3: Pre-filtro → candidateUsernames ────────────────────────────
     console.log(`[discover] ── PASO 3: Pre-filtro`);
@@ -59,9 +78,9 @@ export async function POST(req: NextRequest) {
     console.log(`[discover] ── PASO 4: Profile scraper (${allCandidates.length} perfiles)`);
     const profiles = await scrapeProfiles(allCandidates);
 
-    // ── PASO 5a: Filtro post-perfil (followers 30K-100K) ───────────────────
-    console.log(`[discover] ── PASO 5a: Post-profile filter`);
-    const filteredProfiles = postProfileFilter(profiles);
+    // ── PASO 5a: Filtro post-perfil (followers range) ─────────────────────
+    console.log(`[discover] ── PASO 5a: Post-profile filter (${followersMin/1000}K–${followersMax/1000}K)`);
+    const filteredProfiles = postProfileFilter(profiles, followersMin, followersMax);
     console.log(`[discover] Post-filtro: ${profiles.length} → ${filteredProfiles.length} perfiles`);
 
     if (filteredProfiles.length === 0) {
@@ -111,11 +130,11 @@ export async function POST(req: NextRequest) {
       await new Promise((r) => setTimeout(r, 4_000));
     }
 
-    // ── PASO 6: Preset filter ──────────────────────────────────────────────
+    // ── PASO 6: Filter ─────────────────────────────────────────────────────
     const allScored      = [...scored].sort((a, b) => b.score - a.score);
-    const presetFiltered = scored.filter(passesPresetFilter);
+    const presetFiltered = scored.filter(passesFilter);
     console.log(
-      `[discover] Preset filter: ${scored.length} → ${presetFiltered.length} (female · 25-60 · Miami)`
+      `[discover] Filter: ${scored.length} → ${presetFiltered.length} (gender:${genderAllowed.join('/')} · age:${ageAllowed.filter(a=>a!=='unknown').join('/')} · ${targetCity})`
     );
 
     // ── PASO 7: Sort by score ──────────────────────────────────────────────

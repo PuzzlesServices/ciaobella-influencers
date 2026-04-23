@@ -69,11 +69,20 @@ export interface DiscoverResult {
   stats: SearchStats;
 }
 
-async function runDiscover({ seeds }: { seeds: string[] }): Promise<DiscoverResult> {
+export interface DiscoverFilters {
+  gender?: 'female' | 'male' | 'any';
+  ageMin?: number;
+  ageMax?: number;
+  followersMin?: number;
+  followersMax?: number;
+  city?: string;
+}
+
+async function runDiscover({ seeds, filters }: { seeds: string[]; filters?: DiscoverFilters }): Promise<DiscoverResult> {
   const res = await fetch('/api/discover', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seeds }),
+    body: JSON.stringify({ seeds, filters }),
   });
 
   if (!res.ok) {

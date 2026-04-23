@@ -5,7 +5,6 @@ import { Search, SlidersHorizontal, Hash, Loader2, AlertCircle, Sparkles, MapPin
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import CampaignSidebar, { type NavView } from "@/components/CampaignSidebar";
 import InfluencerCard, { type Influencer } from "@/components/InfluencerCard";
 import HashtagAnalysisPanel from "@/components/HashtagAnalysisPanel";
@@ -30,7 +29,13 @@ const Index = () => {
   const [postsLimit, setPostsLimit]       = useState<number>(100);
 
   // Discovery mode state
-  const [seedInput, setSeedInput]       = useState("");
+  const [seedInput, setSeedInput]             = useState("");
+  const [discoverGender, setDiscoverGender]   = useState<'female' | 'male' | 'any'>('female');
+  const [discoverAgeMin, setDiscoverAgeMin]   = useState(25);
+  const [discoverAgeMax, setDiscoverAgeMax]   = useState(60);
+  const [discoverFollMin, setDiscoverFollMin] = useState(30);   // en K
+  const [discoverFollMax, setDiscoverFollMax] = useState(100);  // en K
+  const [discoverCity, setDiscoverCity]       = useState('miami');
 
   // TikTok → IG mode state
   const [tiktokInput, setTiktokInput]   = useState(DEFAULT_TIKTOK_HASHTAGS);
@@ -108,7 +113,17 @@ const Index = () => {
   };
 
   const handleDiscover = () => {
-    runDiscover({ seeds: parseSeeds() });
+    runDiscover({
+      seeds: parseSeeds(),
+      filters: {
+        gender:       discoverGender,
+        ageMin:       discoverAgeMin,
+        ageMax:       discoverAgeMax,
+        followersMin: discoverFollMin * 1_000,
+        followersMax: discoverFollMax * 1_000,
+        city:         discoverCity,
+      },
+    });
   };
 
   const parseTikTokTags = () =>
@@ -409,23 +424,88 @@ const Index = () => {
             )}
 
             {searchMode === 'discovery' && (
-              <div className="flex items-center gap-3">
-                {/* Preset badges */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <Users className="w-3 h-3" /> Female
-                  </Badge>
-                  <Badge variant="secondary" className="text-xs">25–60 yrs</Badge>
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <MapPin className="w-3 h-3" /> Miami
-                  </Badge>
-                  <Badge variant="secondary" className="text-xs">30K–100K</Badge>
+              <div className="flex items-center gap-3 flex-wrap">
+
+                {/* Gender toggle */}
+                <div className="flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5">
+                  {(['female', 'male', 'any'] as const).map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setDiscoverGender(g)}
+                      disabled={isPending}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 ${
+                        discoverGender === g
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {g === 'female' ? '♀ Female' : g === 'male' ? '♂ Male' : 'All'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Age range */}
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span>Age</span>
+                  <input
+                    type="number"
+                    value={discoverAgeMin}
+                    onChange={(e) => setDiscoverAgeMin(Number(e.target.value))}
+                    disabled={isPending}
+                    min={18} max={99}
+                    className="w-12 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
+                  />
+                  <span>–</span>
+                  <input
+                    type="number"
+                    value={discoverAgeMax}
+                    onChange={(e) => setDiscoverAgeMax(Number(e.target.value))}
+                    disabled={isPending}
+                    min={18} max={99}
+                    className="w-12 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Followers range */}
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Users className="w-3 h-3 shrink-0" />
+                  <input
+                    type="number"
+                    value={discoverFollMin}
+                    onChange={(e) => setDiscoverFollMin(Number(e.target.value))}
+                    disabled={isPending}
+                    min={1}
+                    className="w-14 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
+                  />
+                  <span>–</span>
+                  <input
+                    type="number"
+                    value={discoverFollMax}
+                    onChange={(e) => setDiscoverFollMax(Number(e.target.value))}
+                    disabled={isPending}
+                    min={1}
+                    className="w-14 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
+                  />
+                  <span>K</span>
+                </div>
+
+                {/* City */}
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <input
+                    type="text"
+                    value={discoverCity}
+                    onChange={(e) => setDiscoverCity(e.target.value)}
+                    disabled={isPending}
+                    placeholder="city"
+                    className="w-20 px-1.5 py-1 rounded border border-input bg-background text-xs text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+                  />
                 </div>
 
                 <div className="w-px h-4 bg-border shrink-0" />
 
                 {/* Optional seeds */}
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-40">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
                   <input
                     type="text"
