@@ -52,6 +52,9 @@ export interface SearchRequest {
 export interface DiscoverRequest {
   seeds?: string[];
   resultsType?: 'posts' | 'reels';
+  mode?: 'hashtag' | 'username';
+  customHashtags?: string[];
+  usernames?: string[];
 }
 
 export interface TikTokRequest {

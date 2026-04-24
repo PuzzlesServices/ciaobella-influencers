@@ -1,19 +1,23 @@
 import { NextRequest } from 'next/server';
-import { scrapeByMiamiLocations, scrapeProfiles } from '@/server/services/apify';
+import { scrapeByMiamiLocations, scrapeHashtags, scrapeProfiles } from '@/server/services/apify';
 import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { DiscoverRequest } from '@/server/types';
+import { DiscoverRequest, HashtagPost } from '@/server/types';
 
 export const maxDuration = 300;
 
 const LOCATION_POSTS_LIMIT = 50;
 
 export async function POST(req: NextRequest) {
-  const { seeds = [], resultsType = 'posts' }: DiscoverRequest = await req.json();
-
-  const cleanedSeeds = seeds.map((s) => s.replace(/^@/, '').trim()).filter(Boolean);
+  const {
+    seeds = [],
+    resultsType = 'posts',
+    mode = 'hashtag',
+    customHashtags = [],
+    usernames: requestUsernames = [],
+  }: DiscoverRequest = await req.json();
 
   const encoder = new TextEncoder();
 
@@ -26,52 +30,74 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        // ── PASO 1: Scrape location posts ──────────────────────────────────
-        console.log(`\n[discover] ── PASO 1: location scraper (${LOCATION_POSTS_LIMIT} ${resultsType})`);
-        const posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT, resultsType);
+        let candidateUsernames: string[] = [];
+        let postsForEngagement: HashtagPost[] = [];
+        const stats = { hashtagPostsFound: 0, afterPreFilter: 0, afterQualityFilter: 0 };
 
-        // ── PASO 2: Pre-filtro ─────────────────────────────────────────────
-        const fromLocations = preFilter(posts);
-        console.log(`[discover] Pre-filtro: ${posts.length} posts → ${fromLocations.length} candidatos`);
+        if (mode === 'username') {
+          // ── Modo username: lookup directo, sin hashtag scraping ────────────
+          const cleaned = requestUsernames.map((u) => u.replace(/^@/, '').trim()).filter(Boolean);
+          if (cleaned.length === 0) {
+            send({ type: 'error', message: 'No usernames provided' });
+            controller.close();
+            return;
+          }
+          console.log(`\n[discover] ── Modo @username: ${cleaned.length} usernames`);
+          candidateUsernames  = cleaned;
+          stats.afterPreFilter = cleaned.length;
 
-        const allCandidates = Array.from(new Set([...fromLocations, ...cleanedSeeds]));
+        } else {
+          // ── Modo hashtag: scrape → preFilter → combinar seeds ──────────────
+          const cleanedSeeds = seeds.map((s) => s.replace(/^@/, '').trim()).filter(Boolean);
 
-        if (allCandidates.length === 0) {
-          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterQualityFilter: 0 } });
+          let posts: HashtagPost[];
+          if (customHashtags.length > 0) {
+            const perTag = Math.ceil(LOCATION_POSTS_LIMIT / customHashtags.length);
+            console.log(`\n[discover] ── Modo #hashtag custom (${customHashtags.join(', ')}), ${perTag} ${resultsType} c/u`);
+            posts = await scrapeHashtags(customHashtags, perTag, resultsType);
+          } else {
+            console.log(`\n[discover] ── Modo #hashtag Miami defaults (${LOCATION_POSTS_LIMIT} ${resultsType})`);
+            posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT, resultsType);
+          }
+
+          postsForEngagement  = posts;
+          stats.hashtagPostsFound = posts.length;
+
+          const fromLocations = preFilter(posts);
+          console.log(`[discover] Pre-filtro: ${posts.length} posts → ${fromLocations.length} candidatos`);
+
+          candidateUsernames  = Array.from(new Set([...fromLocations, ...cleanedSeeds]));
+          stats.afterPreFilter = candidateUsernames.length;
+        }
+
+        if (candidateUsernames.length === 0) {
+          send({ type: 'complete', stats });
           controller.close();
           return;
         }
 
-        // ── PASO 3: Profile scraper ────────────────────────────────────────
-        console.log(`[discover] ── PASO 3: Profile scraper (${allCandidates.length} candidatos)`);
-        const profiles = await scrapeProfiles(allCandidates);
+        // ── Profile scraper (común a ambos modos) ─────────────────────────
+        console.log(`[discover] ── Profile scraper (${candidateUsernames.length} candidatos)`);
+        const profiles = await scrapeProfiles(candidateUsernames);
 
-        // ── PASO 4: Quality filter (sin rango de seguidores — es client-side) ──
+        // ── Quality filter ─────────────────────────────────────────────────
         const qualityFiltered = postProfileFilter(profiles);
         console.log(`[discover] Quality filter: ${profiles.length} → ${qualityFiltered.length} perfiles`);
+        stats.afterQualityFilter = qualityFiltered.length;
 
-        // ── Enviar todos los perfiles al cliente de inmediato ──────────────
-        send({
-          type: 'profiled',
-          profiles: qualityFiltered,
-          stats: {
-            hashtagPostsFound:  posts.length,
-            afterPreFilter:     allCandidates.length,
-            afterQualityFilter: qualityFiltered.length,
-          },
-        });
+        send({ type: 'profiled', profiles: qualityFiltered, stats });
 
         if (qualityFiltered.length === 0) {
-          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterQualityFilter: 0 } });
+          send({ type: 'complete', stats });
           controller.close();
           return;
         }
 
-        // ── PASO 5: Gemini scoring — un evento por perfil ─────────────────
-        console.log(`[discover] ── PASO 5: Scoring ${qualityFiltered.length} perfiles con Gemini`);
+        // ── Gemini scoring — un evento por perfil ─────────────────────────
+        console.log(`[discover] ── Scoring ${qualityFiltered.length} perfiles con Gemini`);
 
         for (const profile of qualityFiltered) {
-          const postData = posts.find(
+          const postData = postsForEngagement.find(
             (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
           );
           const engagementRate =
@@ -84,7 +110,6 @@ export async function POST(req: NextRequest) {
             `[discover] Scored @${profile.username} → ${result.score} (${result.label}) | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
           );
 
-          // Enviar score individual para que el card se actualice en tiempo real
           send({
             type:          'scored',
             username:      profile.username,
@@ -112,10 +137,10 @@ export async function POST(req: NextRequest) {
           await new Promise((r) => setTimeout(r, 4_000));
         }
 
-        send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterQualityFilter: qualityFiltered.length } });
+        send({ type: 'complete', stats });
         console.log(`[discover] ✓ Done`);
-
         controller.close();
+
       } catch (err) {
         console.error('[discover] Error:', err);
         send({ type: 'error', message: (err as Error).message });

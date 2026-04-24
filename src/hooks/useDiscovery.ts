@@ -100,16 +100,25 @@ export function useDiscovery() {
     setError(null);
   }, []);
 
+  const [activeMode, setActiveMode] = useState<'hashtag' | 'username'>('hashtag');
+
   const runDiscover = useCallback(async ({
-    seeds,
+    seeds = [],
     resultsType = 'posts',
+    mode = 'hashtag',
+    customHashtags = [],
+    usernames = [],
   }: {
-    seeds: string[];
+    seeds?: string[];
     resultsType?: 'posts' | 'reels';
+    mode?: 'hashtag' | 'username';
+    customHashtags?: string[];
+    usernames?: string[];
   }) => {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
+    setActiveMode(mode);
     setStage('scanning');
     setProfiles([]);
     setScores({});
@@ -120,7 +129,7 @@ export function useDiscovery() {
       const res = await fetch('/api/discover', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ seeds, resultsType }),
+        body:    JSON.stringify({ seeds, resultsType, mode, customHashtags, usernames }),
         signal:  abortRef.current.signal,
       });
 
@@ -196,6 +205,7 @@ export function useDiscovery() {
     runDiscover,
     reset,
     stage,
+    activeMode,
     cards,
     stats,
     error,

@@ -31,7 +31,8 @@ const Index = () => {
   const [searchFollMax, setSearchFollMax] = useState(100);
 
   // Discovery mode state
-  const [seedInput, setSeedInput]                   = useState("");
+  const [discoverMode, setDiscoverMode]             = useState<'hashtag' | 'username'>('hashtag');
+  const [discoverSearchInput, setDiscoverSearchInput] = useState("");
   const [discoverGender, setDiscoverGender]         = useState<'female' | 'male' | 'any'>('female');
   const [discoverAgeMin, setDiscoverAgeMin]         = useState(25);
   const [discoverAgeMax, setDiscoverAgeMax]         = useState(60);
@@ -63,6 +64,7 @@ const Index = () => {
     runDiscover,
     reset:         resetDiscover,
     stage:         discoverStage,
+    activeMode:    discoverActiveMode,
     cards:         discoverCards,
     stats:         discoverStats,
     scoredCount:   discoverScoredCount,
@@ -148,9 +150,6 @@ const Index = () => {
   const parseTags = () =>
     hashtagInput.split(/[\s,]+/).map((t) => t.replace(/^#/, "").trim()).filter(Boolean);
 
-  const parseSeeds = () =>
-    seedInput.split(/[\s,]+/).map((s) => s.replace(/^@/, "").trim()).filter(Boolean);
-
   const handleSearch = () => {
     const tags = parseTags();
     if (tags.length === 0) return;
@@ -159,7 +158,13 @@ const Index = () => {
   };
 
   const handleDiscover = () => {
-    runDiscover({ seeds: parseSeeds(), resultsType: discoverMediaType });
+    const raw = discoverSearchInput.split(/[\s,]+/).map((v) => v.replace(/^[#@]/, '').trim()).filter(Boolean);
+    if (discoverMode === 'hashtag') {
+      runDiscover({ resultsType: discoverMediaType, mode: 'hashtag', customHashtags: raw });
+    } else {
+      if (raw.length === 0) return;
+      runDiscover({ mode: 'username', usernames: raw });
+    }
   };
 
   const parseTikTokTags = () =>
@@ -547,42 +552,86 @@ const Index = () => {
                 />
               </div>
 
-              {/* Posts / Reels toggle */}
-              <div className="flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5">
-                {(['posts', 'reels'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setDiscoverMediaType(t)}
-                    disabled={isDiscoverBusy}
-                    className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 capitalize ${
-                      discoverMediaType === t
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              {/* Posts / Reels toggle — solo en modo hashtag */}
+              {discoverMode === 'hashtag' && (
+                <div className="flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5">
+                  {(['posts', 'reels'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setDiscoverMediaType(t)}
+                      disabled={isDiscoverBusy}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 capitalize ${
+                        discoverMediaType === t
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="w-px h-4 bg-border shrink-0" />
 
-              {/* Seed accounts */}
-              <div className="relative flex-1 min-w-40">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
-                <input
-                  type="text"
-                  placeholder="Seed accounts (optional): handle1, handle2…"
-                  value={seedInput}
-                  onChange={(e) => setSeedInput(e.target.value)}
+              {/* Toggle # / @ */}
+              <div className="flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5 shrink-0">
+                <button
+                  onClick={() => { setDiscoverMode('hashtag'); setDiscoverSearchInput(''); }}
                   disabled={isDiscoverBusy}
-                  className="w-full pl-7 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
-                />
+                  className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 flex items-center gap-1 ${
+                    discoverMode === 'hashtag'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Hash className="w-3 h-3" /> Hashtags
+                </button>
+                <button
+                  onClick={() => { setDiscoverMode('username'); setDiscoverSearchInput(''); }}
+                  disabled={isDiscoverBusy}
+                  className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 flex items-center gap-1 ${
+                    discoverMode === 'username'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span className="font-semibold leading-none">@</span> Usernames
+                </button>
+              </div>
+
+              {/* Input contextual */}
+              <div className="relative flex-1 min-w-40">
+                {discoverMode === 'hashtag' ? (
+                  <>
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Vacío = Miami defaults, o custom: miamilux, miamifashion…"
+                      value={discoverSearchInput}
+                      onChange={(e) => setDiscoverSearchInput(e.target.value)}
+                      disabled={isDiscoverBusy}
+                      className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
+                    <input
+                      type="text"
+                      placeholder="handle1, handle2, handle3…"
+                      value={discoverSearchInput}
+                      onChange={(e) => setDiscoverSearchInput(e.target.value)}
+                      disabled={isDiscoverBusy}
+                      className="w-full pl-7 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                    />
+                  </>
+                )}
               </div>
 
               <Button
                 onClick={handleDiscover}
-                disabled={isDiscoverBusy}
+                disabled={isDiscoverBusy || (discoverMode === 'username' && !discoverSearchInput.trim())}
                 className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 {isDiscovering ? (
@@ -659,9 +708,18 @@ const Index = () => {
           {/* Stats banners */}
           {searchMode === 'discovery' && hasDiscoverData && discoverStats && (
             <div className="text-xs text-muted-foreground leading-relaxed mb-4">
-              <span className="font-medium">{discoverStats.hashtagPostsFound}</span> location posts
-              {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> pre-filtered
-              {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
+              {discoverActiveMode === 'username' ? (
+                <>
+                  <span className="font-medium">{discoverStats.afterPreFilter}</span> usernames
+                  {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">{discoverStats.hashtagPostsFound}</span> location posts
+                  {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> pre-filtered
+                  {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
+                </>
+              )}
               {" → "}
               {isDiscoverScoring
                 ? <><Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /><span className="font-medium">{discoverScoredCount}</span>/{discoverTotal} scoring…</>
@@ -772,13 +830,27 @@ const Index = () => {
 
           {searchMode === 'discovery' && discoverStage === 'idle' && (
             <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground mb-2">Cómo funciona Miami Discovery</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>Escanea {discoverMediaType} con hashtags de Miami (miamigirl, wynwoodmiami, southbeachmiami…)</li>
-                <li>Los perfiles aparecen en cuanto Apify termina — Gemini los verifica en paralelo</li>
-                <li>Mueve el slider de seguidores para filtrar en tiempo real sin re-buscar</li>
-                <li>El género, edad y ciudad también filtran al instante sobre los perfiles ya cargados</li>
-              </ul>
+              {discoverMode === 'hashtag' ? (
+                <>
+                  <p className="font-medium text-foreground mb-2">Modo # Hashtags — Miami Discovery</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>Dejá el input vacío para usar los hashtags Miami por defecto (miamigirl, wynwoodmiami, southbeachmiami…)</li>
+                    <li>O ingresá hashtags propios separados por coma para buscar en otro nicho</li>
+                    <li>Los perfiles aparecen en cuanto Apify termina — Gemini los verifica en paralelo</li>
+                    <li>El género, edad, ciudad y seguidores filtran en tiempo real sin re-buscar</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-foreground mb-2">Modo @ Usernames — Miami Discovery</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>Ingresá usernames de Instagram directamente (handle1, handle2…)</li>
+                    <li>Se saltea el scraping de hashtags — Apify va directo al profile scraper</li>
+                    <li>Ideal para analizar una lista de cuentas conocidas o candidatos específicos</li>
+                    <li>Gemini score, género, edad y ciudad funcionan igual que en el modo hashtag</li>
+                  </ul>
+                </>
+              )}
             </div>
           )}
 
