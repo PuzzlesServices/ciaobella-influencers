@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { scrapeByTikTokNative } from '@/server/services/apify';
 import type { TikTokRawPostFull } from '@/server/services/apify';
 import { filterUsernames } from '@/server/filters/preFilter';
 import { scoreTikTokCreator } from '@/server/services/gemini';
-import type { TikTokNativeRequest, TikTokCreator, ScoredTikTokCreator } from '@/server/types';
+import type { TikTokNativeRequest, TikTokCreator } from '@/server/types';
 
 export const maxDuration = 300;
 
@@ -12,27 +12,10 @@ const DEFAULT_HASHTAGS = [
 ];
 
 const POSTS_LIMIT     = 50;
-const MAX_TO_SCORE    = 8;   // cap Gemini calls to avoid timeout
-const GEMINI_DELAY_MS = 1_500;
+const GEMINI_DELAY_MS = 2_000;
 
-// Min thresholds to qualify as a creator worth evaluating
 const MIN_FOLLOWERS  = 10_000;
 const MIN_AVG_VIEWS  = 1_000;
-
-const PRESET = {
-  genderAllowed: ['female', 'unknown'] as string[],
-  ageAllowed:    ['25-34', '35-44', '45-60', 'unknown'] as string[],
-  targetCity:    'miami',
-};
-
-function passesPresetFilter(s: ScoredTikTokCreator): boolean {
-  if (s.gender && !PRESET.genderAllowed.includes(s.gender)) return false;
-  if (s.estimatedAge && !PRESET.ageAllowed.includes(s.estimatedAge)) return false;
-  const city = (s.inferredCity ?? '').toLowerCase().trim();
-  if (city && city !== 'unknown' && !city.includes(PRESET.targetCity)) return false;
-  if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
-  return true;
-}
 
 function extractUsername(post: TikTokRawPostFull): string | undefined {
   if (post.authorMeta?.name) return post.authorMeta.name;
@@ -71,20 +54,19 @@ function aggregateCreators(posts: TikTokRawPostFull[]): TikTokCreator[] {
     if (!existing) {
       map.set(username, {
         username,
-        nickname:      post.authorMeta?.nickName || rawUsername,
-        bio:           post.authorMeta?.signature || '',
+        nickname:       post.authorMeta?.nickName || rawUsername,
+        bio:            post.authorMeta?.signature || '',
         followersCount: post.authorMeta?.fans    ?? 0,
-        videosCount:   post.authorMeta?.video    ?? 0,
-        profilePicUrl: post.authorMeta?.avatar,
-        videos:        [videoEntry],
+        videosCount:    post.authorMeta?.video    ?? 0,
+        profilePicUrl:  post.authorMeta?.avatar,
+        videos:         [videoEntry],
       });
     } else {
       existing.videos.push(videoEntry);
-      // Update author fields if we got richer data on a later post
-      if (!existing.followersCount && post.authorMeta?.fans)     existing.followersCount = post.authorMeta.fans;
-      if (!existing.nickname       && post.authorMeta?.nickName) existing.nickname       = post.authorMeta.nickName;
-      if (!existing.bio            && post.authorMeta?.signature) existing.bio           = post.authorMeta.signature;
-      if (!existing.profilePicUrl  && post.authorMeta?.avatar)   existing.profilePicUrl  = post.authorMeta.avatar;
+      if (!existing.followersCount && post.authorMeta?.fans)      existing.followersCount = post.authorMeta.fans;
+      if (!existing.nickname       && post.authorMeta?.nickName)  existing.nickname       = post.authorMeta.nickName;
+      if (!existing.bio            && post.authorMeta?.signature) existing.bio            = post.authorMeta.signature;
+      if (!existing.profilePicUrl  && post.authorMeta?.avatar)    existing.profilePicUrl  = post.authorMeta.avatar;
     }
   }
 
@@ -111,77 +93,99 @@ function aggregateCreators(posts: TikTokRawPostFull[]): TikTokCreator[] {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const { hashtags: rawHashtags }: TikTokNativeRequest = await req.json();
-    const hashtags = rawHashtags && rawHashtags.length > 0 ? rawHashtags : DEFAULT_HASHTAGS;
+  const encoder = new TextEncoder();
 
-    // ── STEP 1: Scrape TikTok posts ────────────────────────────────────────
-    console.log(`\n[tiktok-native] ── STEP 1: TikTok scraper — [${hashtags.join(', ')}]`);
-    const posts = await scrapeByTikTokNative(hashtags, POSTS_LIMIT);
-    console.log(`[tiktok-native] Raw posts: ${posts.length}`);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch { /* client disconnected */ }
+      };
 
-    // ── STEP 2: Aggregate posts by creator ────────────────────────────────
-    console.log('[tiktok-native] ── STEP 2: Aggregating by creator');
-    const allCreators = aggregateCreators(posts);
-    console.log(`[tiktok-native] Unique creators: ${allCreators.length}`);
-
-    // ── STEP 3: Username blocklist + follower/view thresholds ─────────────
-    console.log('[tiktok-native] ── STEP 3: Filtering creators');
-    const usernames     = allCreators.map((c) => c.username);
-    const allowedNames  = new Set(filterUsernames(usernames));
-    const filtered      = allCreators.filter(
-      (c) =>
-        allowedNames.has(c.username) &&
-        c.followersCount >= MIN_FOLLOWERS &&
-        c.avgViews >= MIN_AVG_VIEWS,
-    );
-    console.log(`[tiktok-native] After filter: ${allCreators.length} → ${filtered.length}`);
-
-    if (filtered.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        allScored: [],
-        stats: { hashtagPostsFound: posts.length, afterPreFilter: allCreators.length, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-      });
-    }
-
-    // ── STEP 4: Gemini scoring (capped to MAX_TO_SCORE to avoid timeout) ────
-    const toScore = filtered.slice(0, MAX_TO_SCORE);
-    console.log(`[tiktok-native] ── STEP 4: Gemini scoring (${toScore.length}/${filtered.length} creators)`);
-    const scored: ScoredTikTokCreator[] = [];
-    for (const creator of toScore) {
       try {
-        const result = await scoreTikTokCreator(creator);
-        scored.push({ ...creator, ...result });
-        console.log(
-          `[tiktok-native] Scored @${creator.username} → ${result.score} | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`,
+        const { hashtags: rawHashtags }: TikTokNativeRequest = await req.json();
+        const hashtags = rawHashtags && rawHashtags.length > 0 ? rawHashtags : DEFAULT_HASHTAGS;
+
+        // ── STEP 1: Scrape TikTok posts ────────────────────────────────────────
+        console.log(`\n[tiktok-native] ── STEP 1: TikTok scraper — [${hashtags.join(', ')}]`);
+        const posts = await scrapeByTikTokNative(hashtags, POSTS_LIMIT);
+        console.log(`[tiktok-native] Raw posts: ${posts.length}`);
+
+        // ── STEP 2: Aggregate posts by creator ────────────────────────────────
+        console.log('[tiktok-native] ── STEP 2: Aggregating by creator');
+        const allCreators = aggregateCreators(posts);
+        console.log(`[tiktok-native] Unique creators: ${allCreators.length}`);
+
+        // ── STEP 3: Pre-filter ────────────────────────────────────────────────
+        console.log('[tiktok-native] ── STEP 3: Filtering creators');
+        const usernames    = allCreators.map((c) => c.username);
+        const allowedNames = new Set(filterUsernames(usernames));
+        const filtered     = allCreators.filter(
+          (c) =>
+            allowedNames.has(c.username) &&
+            c.followersCount >= MIN_FOLLOWERS &&
+            c.avgViews >= MIN_AVG_VIEWS,
         );
+        console.log(`[tiktok-native] After filter: ${allCreators.length} → ${filtered.length}`);
+
+        const stats = {
+          hashtagPostsFound:  posts.length,
+          afterPreFilter:     allCreators.length,
+          afterProfileFilter: filtered.length,
+        };
+
+        if (filtered.length === 0) {
+          send({ type: 'complete', stats: { ...stats, afterPresetFilter: 0, final: 0 } });
+          controller.close();
+          return;
+        }
+
+        // ── STEP 4: Send all profiled creators immediately ────────────────────
+        send({ type: 'profiled', creators: filtered, stats });
+
+        // ── STEP 5: Gemini scoring — one event per creator ────────────────────
+        console.log(`[tiktok-native] ── STEP 4: Gemini scoring (${filtered.length} creators)`);
+        for (const creator of filtered) {
+          try {
+            const result = await scoreTikTokCreator(creator);
+            console.log(
+              `[tiktok-native] Scored @${creator.username} → ${result.score} | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`,
+            );
+            send({
+              type:         'scored',
+              username:     creator.username,
+              score:        result.score,
+              label:        result.label,
+              niche:        result.niche,
+              gender:       result.gender,
+              estimatedAge: result.estimatedAge,
+              inferredCity: result.inferredCity,
+            });
+          } catch (err) {
+            console.warn(`[tiktok-native] Gemini failed for @${creator.username}:`, (err as Error).message);
+          }
+          await new Promise((r) => setTimeout(r, GEMINI_DELAY_MS));
+        }
+
+        send({ type: 'complete', stats });
+        console.log(`[tiktok-native] ✓ Done`);
+        controller.close();
+
       } catch (err) {
-        console.warn(`[tiktok-native] Gemini failed for @${creator.username}, skipping:`, (err as Error).message);
+        console.error('[tiktok-native] Error:', err);
+        send({ type: 'error', message: (err as Error).message });
+        controller.close();
       }
-      await new Promise((r) => setTimeout(r, GEMINI_DELAY_MS));
-    }
+    },
+  });
 
-    // ── STEP 5: Preset filter + sort ──────────────────────────────────────
-    const allScored      = [...scored].sort((a, b) => b.score - a.score);
-    const presetFiltered = scored.filter(passesPresetFilter);
-    const sorted         = presetFiltered.sort((a, b) => b.score - a.score);
-    console.log(`[tiktok-native] Preset filter: ${scored.length} → ${presetFiltered.length}`);
-    console.log(`[tiktok-native] ✓ Done — ${sorted.length} creators ranked`);
-
-    return NextResponse.json({
-      influencers: sorted,
-      allScored,
-      stats: {
-        hashtagPostsFound:  posts.length,
-        afterPreFilter:     allCreators.length,
-        afterProfileFilter: filtered.length,
-        afterPresetFilter:  presetFiltered.length,
-        final:              sorted.length,
-      },
-    });
-  } catch (err) {
-    console.error('[tiktok-native] Error:', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache, no-transform',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

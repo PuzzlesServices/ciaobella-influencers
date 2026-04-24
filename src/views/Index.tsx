@@ -85,9 +85,17 @@ const Index = () => {
   } = useTikTokToIG();
 
   const {
-    mutate: runTikTokNative, data: tiktokNativeResult,
-    isPending: isTikTokingNative, isError: isTikTokNativeError, error: tiktokNativeError,
-    reset: resetTikTokNative,
+    mutate:        runTikTokNative,
+    reset:         resetTikTokNative,
+    stage:         tiktokNativeStage,
+    cards:         tiktokNativeCards,
+    stats:         tiktokNativeStats,
+    scoredCount:   tiktokNativeScoredCount,
+    totalCreators: tiktokNativeTotal,
+    isScanning:    isTikTokingNative,
+    isScoring:     isTikTokNativeScoring,
+    isError:       isTikTokNativeError,
+    error:         tiktokNativeError,
   } = useTikTokNative();
 
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
@@ -97,7 +105,8 @@ const Index = () => {
   const hasDiscoverData = discoverStage === 'scoring' || discoverStage === 'done';
   const hasSearchData   = searchStage === 'scoring' || searchStage === 'done';
   const hasTiktokData   = tiktokStage === 'scoring' || tiktokStage === 'done';
-  const anyBusy         = isSearching || isSearchScoring || isDiscoverBusy || isTikToking || isTikTokScoring || isTikTokingNative;
+  const hasTikTokNativeData = tiktokNativeStage === 'scoring' || tiktokNativeStage === 'done';
+  const anyBusy             = isSearching || isSearchScoring || isDiscoverBusy || isTikToking || isTikTokScoring || isTikTokingNative || isTikTokNativeScoring;
 
   const isError =
     searchMode === 'hashtag'    ? isSearchError
@@ -109,7 +118,7 @@ const Index = () => {
     searchMode === 'hashtag'    ? searchError
     : searchMode === 'discovery'  ? discoverError
     : searchMode === 'tiktok'     ? tiktokError
-    :                               tiktokNativeError as Error | null;
+    :                               (tiktokNativeError as Error | null);
 
   // ── Client-side filters ────────────────────────────────────────────────────
   const filteredDiscoverCards = discoverCards.filter((card) => {
@@ -212,24 +221,27 @@ const Index = () => {
       return (b.score ?? 0) - (a.score ?? 0);
     });
 
-  // TikTok native uses old Influencer format
-  const tiktokNativeList = (
-    showAll ? (tiktokNativeResult?.allProfiled ?? []) : (tiktokNativeResult?.influencers ?? [])
-  ).filter((i) => {
-    if (i.followersRaw < tiktokNativeFollMin * 1_000) return false;
-    if (i.followersRaw > tiktokNativeFollMax * 1_000) return false;
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return i.name.toLowerCase().includes(q) || i.username.toLowerCase().includes(q) || i.niche.toLowerCase().includes(q);
-  }).sort((a, b) => {
-    if (sortBy === "match") return b.matchScore - a.matchScore;
-    if (sortBy === "engagement") return parseFloat(b.engagement) - parseFloat(a.engagement);
-    if (sortBy === "followers") {
-      const parse = (s: string) => s.endsWith("M") ? parseFloat(s) * 1_000_000 : s.endsWith("K") ? parseFloat(s) * 1_000 : parseFloat(s);
-      return parse(b.followers) - parse(a.followers);
-    }
-    return 0;
-  });
+  // Preset filter for tiktok-native (mirrors server-side passesPresetFilter)
+  const passesNativePreset = (card: (typeof tiktokNativeCards)[0]) => {
+    if (card.isScoring) return false;
+    const genderOk = !card.gender || card.gender === 'unknown' || card.gender === 'female';
+    const ageOk    = !card.estimatedAge || ['25-34', '35-44', '45-60', 'unknown'].includes(card.estimatedAge);
+    const city     = (card.inferredCity ?? '').toLowerCase().trim();
+    const cityOk   = !city || city === 'unknown' || city.includes('miami');
+    if (card.gender === 'unknown' && card.estimatedAge === 'unknown' && (card.score ?? 0) < 40) return false;
+    return genderOk && ageOk && cityOk;
+  };
+
+  const filteredNativeCards = tiktokNativeCards
+    .filter((c) => c.followersCount >= tiktokNativeFollMin * 1_000 && c.followersCount <= tiktokNativeFollMax * 1_000)
+    .filter((c) => showAll || c.isScoring || passesNativePreset(c))
+    .sort((a, b) => {
+      if (a.isScoring && !b.isScoring) return 1;
+      if (!a.isScoring && b.isScoring) return -1;
+      return (b.score ?? 0) - (a.score ?? 0);
+    });
+
+  const aiVerifiedCount = tiktokNativeCards.filter(passesNativePreset).length;
 
   // ── Status text ───────────────────────────────────────────────────────────
   const statusText =
@@ -248,9 +260,10 @@ const Index = () => {
       : isTikTokScoring    ? `${tiktokScored} / ${tiktokTotal} scored by Gemini…`
       : hasTiktokData      ? `${filteredTiktokCards.length} of ${tiktokTotal} profiles match filters`
       :                      "Click Search to find Miami influencers via TikTok"
-    : isTikTokingNative   ? "Scraping TikTok videos and scoring creators…"
-    : !tiktokNativeResult  ? "Enter hashtags to find viral TikTok creators"
-    :                        `${tiktokNativeList.length} creator${tiktokNativeList.length !== 1 ? "s" : ""} found`;
+    : isTikTokingNative        ? "Scraping TikTok videos…"
+    : isTikTokNativeScoring    ? `${tiktokNativeScoredCount} / ${tiktokNativeTotal} scored by Gemini…`
+    : hasTikTokNativeData      ? `${filteredNativeCards.length} of ${tiktokNativeTotal} creators match filters`
+    :                            "Enter hashtags to find viral TikTok creators";
 
   // ── Card renderer (DiscoverCard → InfluencerCard) ─────────────────────────
   const renderDiscoverCard = (card: DiscoverCard) => {
@@ -274,6 +287,32 @@ const Index = () => {
       profileUrl:    `https://www.instagram.com/${card.username}/`,
       profilePicUrl: card.profilePicUrl,
       location:      loc,
+    };
+    return <InfluencerCard key={card.username} influencer={inf} scoring={card.isScoring} />;
+  };
+
+  // ── Card renderer (TikTokCard → InfluencerCard) ───────────────────────────
+  const renderTikTokNativeCard = (card: ReturnType<typeof useTikTokNative>['cards'][0]) => {
+    const formatF = (n: number) =>
+      n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M`
+      : n >= 1_000 ? `${Math.round(n / 1_000)}K`
+      : String(n);
+    const initials = (card.nickname || card.username)
+      .split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('');
+    const inf: Influencer = {
+      name:          card.nickname || card.username,
+      username:      `@${card.username}`,
+      followers:     formatF(card.followersCount),
+      followersRaw:  card.followersCount,
+      engagement:    `${(card.engagementRate ?? 0).toFixed(1)}%`,
+      engagementRaw: card.engagementRate ?? null,
+      matchScore:    card.score ?? -1,
+      niche:         card.niche ?? '—',
+      avatar:        initials,
+      profileUrl:    `https://www.tiktok.com/@${card.username}`,
+      profilePicUrl: card.profilePicUrl,
+      location:      card.inferredCity && card.inferredCity !== 'unknown' ? card.inferredCity : undefined,
+      platform:      'tiktok',
     };
     return <InfluencerCard key={card.username} influencer={inf} scoring={card.isScoring} />;
   };
@@ -699,7 +738,7 @@ const Index = () => {
                     : `${tiktokTotal} profiled · ${tiktokCards.filter(c => !c.isScoring).length} scored`}
                 </span>
               )}
-              {searchMode === 'tiktok-native' && tiktokNativeResult && (
+              {searchMode === 'tiktok-native' && hasTikTokNativeData && (
                 <>
                   <button
                     onClick={() => setShowAll(false)}
@@ -707,7 +746,7 @@ const Index = () => {
                       !showAll ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
-                    AI Verified ({tiktokNativeResult.influencers?.length ?? 0})
+                    AI Verified ({aiVerifiedCount})
                   </button>
                   <button
                     onClick={() => setShowAll(true)}
@@ -715,7 +754,7 @@ const Index = () => {
                       showAll ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
-                    All ({tiktokNativeResult.allProfiled?.length ?? 0})
+                    All ({tiktokNativeTotal})
                   </button>
                 </>
               )}
@@ -771,13 +810,16 @@ const Index = () => {
             </div>
           )}
 
-          {searchMode === 'tiktok-native' && tiktokNativeResult && (
+          {searchMode === 'tiktok-native' && hasTikTokNativeData && tiktokNativeStats && (
             <div className="text-xs text-muted-foreground leading-relaxed mb-4">
-              <span className="font-medium">{tiktokNativeResult.stats?.hashtagPostsFound}</span> TikTok videos
-              {" → "}<span className="font-medium">{tiktokNativeResult.stats?.afterPreFilter}</span> pre-filtered
-              {" → "}<span className="font-medium">{tiktokNativeResult.stats?.afterProfileFilter}</span> profiled
-              {" → "}<span className="font-medium">{tiktokNativeResult.stats?.afterPresetFilter}</span> AI-verified
-              {" → "}<span className="font-medium text-foreground">{tiktokNativeResult.stats?.final}</span> ranked
+              <span className="font-medium">{tiktokNativeStats.hashtagPostsFound}</span> TikTok videos
+              {" → "}<span className="font-medium">{tiktokNativeStats.afterPreFilter}</span> pre-filtered
+              {" → "}<span className="font-medium">{tiktokNativeStats.afterProfileFilter}</span> profiled
+              {" → "}
+              {isTikTokNativeScoring
+                ? <><Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /><span className="font-medium">{tiktokNativeScoredCount}</span>/{tiktokNativeTotal} scoring…</>
+                : <><span className="font-medium text-foreground">{tiktokNativeScoredCount}</span> scored · <span className="font-medium text-foreground">{aiVerifiedCount}</span> AI verified</>
+              }
             </div>
           )}
 
@@ -812,6 +854,16 @@ const Index = () => {
             </div>
           )}
 
+          {searchMode === 'tiktok-native' && isTikTokNativeScoring && (
+            <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm mb-5">
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
+              <span className="text-primary">
+                <span className="font-medium">Gemini scoring {tiktokNativeTotal} creators</span>
+                {" — "}{tiktokNativeScoredCount} done, {tiktokNativeTotal - tiktokNativeScoredCount} in queue. Creators appear as they're scored.
+              </span>
+            </div>
+          )}
+
           {/* Hashtag analysis panel */}
           {searchMode === 'hashtag' && analysisResult && (
             <HashtagAnalysisPanel
@@ -833,7 +885,7 @@ const Index = () => {
             </div>
           )}
 
-          {searchMode === 'tiktok-native' && !isTikTokingNative && !tiktokNativeResult && (
+          {searchMode === 'tiktok-native' && tiktokNativeStage === 'idle' && (
             <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-2">How TikTok Creators works</p>
               <ul className="space-y-1 list-disc list-inside">
@@ -929,15 +981,13 @@ const Index = () => {
             </div>
           )}
 
-          {/* TikTok native cards (old format — unchanged) */}
-          {searchMode === 'tiktok-native' && !isTikTokingNative && tiktokNativeResult && (
+          {/* TikTok native cards */}
+          {searchMode === 'tiktok-native' && hasTikTokNativeData && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {tiktokNativeList.map((influencer) => (
-                <InfluencerCard key={influencer.username} influencer={influencer} />
-              ))}
-              {tiktokNativeList.length === 0 && (
+              {filteredNativeCards.map(renderTikTokNativeCard)}
+              {filteredNativeCards.length === 0 && (
                 <p className="col-span-full text-center text-muted-foreground py-16 text-sm">
-                  No influencers matched the current filters.
+                  No creators match the current filters.
                 </p>
               )}
             </div>
