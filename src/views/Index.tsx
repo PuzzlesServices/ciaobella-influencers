@@ -51,6 +51,8 @@ const Index = () => {
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter]   = useState("");
   const [sortBy, setSortBy]   = useState("match");
+  const [tiktokNativeFollMin, setTiktokNativeFollMin] = useState(1);
+  const [tiktokNativeFollMax, setTiktokNativeFollMax] = useState(500);
 
   // ── Hooks ──────────────────────────────────────────────────────────────────
   const {
@@ -214,6 +216,8 @@ const Index = () => {
   const tiktokNativeList = (
     showAll ? (tiktokNativeResult?.allProfiled ?? []) : (tiktokNativeResult?.influencers ?? [])
   ).filter((i) => {
+    if (i.followersRaw < tiktokNativeFollMin * 1_000) return false;
+    if (i.followersRaw > tiktokNativeFollMax * 1_000) return false;
     if (!filter) return true;
     const q = filter.toLowerCase();
     return i.name.toLowerCase().includes(q) || i.username.toLowerCase().includes(q) || i.niche.toLowerCase().includes(q);
@@ -457,33 +461,46 @@ const Index = () => {
 
           {/* ── TikTok native ── */}
           {searchMode === 'tiktok-native' && (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                <Music2 className="w-3.5 h-3.5" />
-                <span>TikTok hashtags</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                  <Music2 className="w-3.5 h-3.5" />
+                  <span>TikTok hashtags</span>
+                </div>
+                <div className="relative flex-1">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="miami, miamilifestyle, miamifashion..."
+                    value={tiktokNativeInput}
+                    onChange={(e) => setTiktokNativeInput(e.target.value)}
+                    disabled={anyBusy}
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+                  />
+                </div>
+                <Button
+                  onClick={handleTikTokNative}
+                  disabled={anyBusy || !tiktokNativeInput.trim()}
+                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {isTikTokingNative ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
+                  ) : (
+                    <><Music2 className="w-4 h-4 mr-2" /> Search</>
+                  )}
+                </Button>
               </div>
-              <div className="relative flex-1">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="miami, miamilifestyle, miamifashion..."
-                  value={tiktokNativeInput}
-                  onChange={(e) => setTiktokNativeInput(e.target.value)}
-                  disabled={anyBusy}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
+              {/* Followers slider */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Users className="w-3 h-3 shrink-0" />
+                <span className="shrink-0 tabular-nums w-24">{tiktokNativeFollMin}K – {tiktokNativeFollMax}K</span>
+                <Slider
+                  value={[tiktokNativeFollMin, tiktokNativeFollMax]}
+                  onValueChange={(v) => { setTiktokNativeFollMin(v[0]); setTiktokNativeFollMax(v[1]); }}
+                  min={1} max={500} step={5}
+                  className="w-36"
                 />
               </div>
-              <Button
-                onClick={handleTikTokNative}
-                disabled={anyBusy || !tiktokNativeInput.trim()}
-                className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {isTikTokingNative ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching…</>
-                ) : (
-                  <><Music2 className="w-4 h-4 mr-2" /> Search</>
-                )}
-              </Button>
             </div>
           )}
 
