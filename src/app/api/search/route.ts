@@ -1,149 +1,130 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { scrapeHashtags, scrapeProfiles } from '@/server/services/apify';
 import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { SearchRequest, ScoredInfluencer } from '@/server/types';
+import { SearchRequest } from '@/server/types';
 
-// Allow up to 20 minutes — Apify scraper can take 15+ min on rate-limited runs
 export const maxDuration = 300;
 
-// ── Preset campaign filters (Monisha Melwani) ───────────────────────────────
-const PRESET = {
-  postsLimitDefault: 100,
-  genderAllowed:     ['female', 'unknown'] as string[],
-  ageAllowed:        ['25-34', '35-44', '45-60', 'unknown'] as string[],
-  targetCity:        'miami',
-};
-
-function passesPresetFilter(s: ScoredInfluencer): boolean {
-  // Gender: reject only if explicitly male
-  if (s.gender && !PRESET.genderAllowed.includes(s.gender)) return false;
-
-  // Age: reject only if clearly outside 25-60
-  if (s.estimatedAge && !PRESET.ageAllowed.includes(s.estimatedAge)) return false;
-
-  // City: reject only if Gemini identified a specific non-Miami city
-  const city = (s.inferredCity ?? '').toLowerCase().trim();
-  if (city && city !== 'unknown' && !city.includes(PRESET.targetCity)) return false;
-
-  // Likely a non-personal account: gender+age both unknown AND score is low
-  if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
-
-  return true;
-}
+const POSTS_LIMIT_DEFAULT = 100;
 
 export async function POST(req: NextRequest) {
-  try {
-    const { hashtags: rawHashtags, resultsType = 'posts', postsLimit }: SearchRequest = await req.json();
+  const { hashtags: rawHashtags, resultsType = 'posts', postsLimit }: SearchRequest = await req.json();
 
-    if (!rawHashtags || (Array.isArray(rawHashtags) && rawHashtags.length === 0)) {
-      return NextResponse.json({ error: 'hashtags is required' }, { status: 400 });
-    }
-
-    const hashtagList     = Array.isArray(rawHashtags) ? rawHashtags : [rawHashtags];
-    const totalLimit      = postsLimit ?? PRESET.postsLimitDefault;
-    const limitPerHashtag = Math.ceil(totalLimit / hashtagList.length);
-
-    // ── PASO 2: Apify Hashtag Scraper ──────────────────────────────────────
-    console.log(`\n[search] ── PASO 2: Hashtag scraper (${totalLimit} posts, ${limitPerHashtag}/hashtag, type: ${resultsType})`);
-    const posts = await scrapeHashtags(hashtagList, limitPerHashtag, resultsType);
-
-    // ── PASO 3: Pre-filtro local ───────────────────────────────────────────
-    console.log(`[search] ── PASO 3: Pre-filtro`);
-    const candidateUsernames = preFilter(posts);
-    console.log(`[search] Pre-filtro: ${posts.length} posts → ${candidateUsernames.length} candidatos`);
-
-    if (candidateUsernames.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-      });
-    }
-
-    // ── PASO 4: Apify Profile Scraper ──────────────────────────────────────
-    console.log(`[search] ── PASO 4: Profile scraper (${candidateUsernames.length} perfiles)`);
-    const profiles = await scrapeProfiles(candidateUsernames);
-
-    // ── PASO 5a: Filtro post-perfil (followers 30K-100K) ───────────────────
-    console.log(`[search] ── PASO 5a: Post-profile filter`);
-    const filteredProfiles = postProfileFilter(profiles);
-    console.log(`[search] Post-filtro: ${profiles.length} → ${filteredProfiles.length} perfiles`);
-
-    if (filteredProfiles.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: {
-          hashtagPostsFound: posts.length,
-          afterPreFilter: candidateUsernames.length,
-          afterProfileFilter: 0,
-          afterPresetFilter: 0,
-          final: 0,
-        },
-      });
-    }
-
-    // ── PASO 5b: Gemini scoring + clasificación (gender / age / city) ──────
-    console.log(`[search] ── PASO 5b: Scoring ${filteredProfiles.length} perfiles con Gemini`);
-
-    const scored: ScoredInfluencer[] = [];
-    for (const profile of filteredProfiles) {
-      const postData = posts.find(
-        (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
-      );
-      const engagementRate =
-        profile.followersCount > 0 && postData
-          ? ((postData.likesCount + postData.commentsCount) / profile.followersCount) * 100
-          : 0;
-
-      const result = await scoreInfluencer(profile, engagementRate);
-      scored.push({ ...profile, ...result, engagementRate });
-      console.log(
-        `[search] Scored @${profile.username} → ${result.score} (${result.label}) | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
-      );
-
-      // ── Cache to Supabase ─────────────────────────────────────────────────
-      cacheInfluencer({
-        username:        profile.username,
-        full_name:       profile.fullName,
-        profile_pic:     profile.profilePicUrl,
-        bio:             profile.biography,
-        followers_count: profile.followersCount,
-        engagement_rate: engagementRate,
-        match_score:     result.score,
-        ai_category:     result.niche,
-        ai_reason:       result.reason,
-      }).catch((err) => console.error(`[search] cacheInfluencer failed for @${profile.username}:`, err));
-
-      // Respect Gemini free tier rate limit (15 RPM)
-      await new Promise((r) => setTimeout(r, 4_000));
-    }
-
-    // ── PASO 6: Preset filter (female · 25-60 · Miami) ────────────────────
-    const allScored      = [...scored].sort((a, b) => b.score - a.score);
-    const presetFiltered = scored.filter(passesPresetFilter);
-    console.log(
-      `[search] Preset filter: ${scored.length} → ${presetFiltered.length} perfiles (female · 25-60 · Miami)`
-    );
-
-    // ── PASO 7: Sort by score ──────────────────────────────────────────────
-    const sorted = presetFiltered.sort((a, b) => b.score - a.score);
-    console.log(`[search] ✓ Done — ${sorted.length} influencers ranked`);
-
-    return NextResponse.json({
-      influencers: sorted,
-      allScored,
-      stats: {
-        hashtagPostsFound:  posts.length,
-        afterPreFilter:     candidateUsernames.length,
-        afterProfileFilter: filteredProfiles.length,
-        afterPresetFilter:  presetFiltered.length,
-        final:              sorted.length,
-      },
-    });
-  } catch (err) {
-    console.error('[search] Error:', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  if (!rawHashtags || (Array.isArray(rawHashtags) && rawHashtags.length === 0)) {
+    return new Response(JSON.stringify({ error: 'hashtags is required' }), { status: 400 });
   }
+
+  const hashtagList     = Array.isArray(rawHashtags) ? rawHashtags : [rawHashtags];
+  const totalLimit      = postsLimit ?? POSTS_LIMIT_DEFAULT;
+  const limitPerHashtag = Math.ceil(totalLimit / hashtagList.length);
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); }
+        catch { /* client disconnected */ }
+      };
+
+      try {
+        // PASO 1: Hashtag scraper
+        console.log(`\n[search] ── PASO 1: Hashtag scraper (${totalLimit} posts, type: ${resultsType})`);
+        const posts = await scrapeHashtags(hashtagList, limitPerHashtag, resultsType);
+
+        // PASO 2: Pre-filtro
+        const candidates = preFilter(posts);
+        console.log(`[search] Pre-filtro: ${posts.length} posts → ${candidates.length} candidatos`);
+
+        if (candidates.length === 0) {
+          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterQualityFilter: 0 } });
+          controller.close();
+          return;
+        }
+
+        // PASO 3: Profile scraper
+        console.log(`[search] ── PASO 3: Profile scraper (${candidates.length} perfiles)`);
+        const profiles = await scrapeProfiles(candidates);
+
+        // PASO 4: Quality filter (sin rango de seguidores — client-side)
+        const quality = postProfileFilter(profiles);
+        console.log(`[search] Quality filter: ${profiles.length} → ${quality.length} perfiles`);
+
+        send({
+          type: 'profiled',
+          profiles: quality,
+          stats: { hashtagPostsFound: posts.length, afterPreFilter: candidates.length, afterQualityFilter: quality.length },
+        });
+
+        if (quality.length === 0) {
+          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: candidates.length, afterQualityFilter: 0 } });
+          controller.close();
+          return;
+        }
+
+        // PASO 5: Gemini scoring — evento por perfil
+        console.log(`[search] ── PASO 5: Scoring ${quality.length} perfiles`);
+
+        for (const profile of quality) {
+          const postData = posts.find(
+            (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
+          );
+          const engagementRate =
+            profile.followersCount > 0 && postData
+              ? ((postData.likesCount + postData.commentsCount) / profile.followersCount) * 100
+              : 0;
+
+          const result = await scoreInfluencer(profile, engagementRate);
+          console.log(`[search] Scored @${profile.username} → ${result.score} (${result.label})`);
+
+          send({
+            type:          'scored',
+            username:      profile.username,
+            score:         result.score,
+            label:         result.label,
+            niche:         result.niche,
+            gender:        result.gender,
+            estimatedAge:  result.estimatedAge,
+            inferredCity:  result.inferredCity,
+            engagementRate,
+          });
+
+          cacheInfluencer({
+            username:        profile.username,
+            full_name:       profile.fullName,
+            profile_pic:     profile.profilePicUrl,
+            bio:             profile.biography,
+            followers_count: profile.followersCount,
+            engagement_rate: engagementRate,
+            match_score:     result.score,
+            ai_category:     result.niche,
+            ai_reason:       result.reason,
+          }).catch((err) => console.error(`[search] cacheInfluencer failed:`, err));
+
+          await new Promise((r) => setTimeout(r, 4_000));
+        }
+
+        send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: candidates.length, afterQualityFilter: quality.length } });
+        console.log(`[search] ✓ Done`);
+        controller.close();
+
+      } catch (err) {
+        console.error('[search] Error:', err);
+        send({ type: 'error', message: (err as Error).message });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache, no-transform',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

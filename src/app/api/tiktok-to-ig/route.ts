@@ -1,127 +1,121 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { scrapeByTikTok, scrapeProfiles } from '@/server/services/apify';
 import { filterUsernames } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { TikTokRequest, ScoredInfluencer } from '@/server/types';
+import { TikTokRequest } from '@/server/types';
 
 export const maxDuration = 300;
 
-// ── Defaults ────────────────────────────────────────────────────────────────
 const DEFAULT_HASHTAGS = [
   'miami', 'miamilifestyle', 'miamifashion', 'miamimom', 'wynwood',
 ];
 
-const TIKTOK_POSTS_LIMIT = 50; // more posts → more unique authors to cross-ref
-
-// ── Preset campaign filters (Monisha Melwani) ───────────────────────────────
-const PRESET = {
-  genderAllowed: ['female', 'unknown'] as string[],
-  ageAllowed:    ['25-34', '35-44', '45-60', 'unknown'] as string[],
-  targetCity:    'miami',
-};
-
-function passesPresetFilter(s: ScoredInfluencer): boolean {
-  if (s.gender && !PRESET.genderAllowed.includes(s.gender)) return false;
-  if (s.estimatedAge && !PRESET.ageAllowed.includes(s.estimatedAge)) return false;
-  const city = (s.inferredCity ?? '').toLowerCase().trim();
-  if (city && city !== 'unknown' && !city.includes(PRESET.targetCity)) return false;
-  if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
-  return true;
-}
+const TIKTOK_POSTS_LIMIT = 50;
 
 export async function POST(req: NextRequest) {
-  try {
-    const { hashtags: rawHashtags }: TikTokRequest = await req.json();
-    const hashtags = (rawHashtags && rawHashtags.length > 0) ? rawHashtags : DEFAULT_HASHTAGS;
+  const { hashtags: rawHashtags }: TikTokRequest = await req.json();
+  const hashtags = (rawHashtags && rawHashtags.length > 0) ? rawHashtags : DEFAULT_HASHTAGS;
 
-    // ── PASO 2: TikTok scraper → unique author usernames ───────────────────
-    console.log(`\n[tiktok-to-ig] ── PASO 2: TikTok scraper — [${hashtags.join(', ')}]`);
-    const tiktokUsernames = await scrapeByTikTok(hashtags, TIKTOK_POSTS_LIMIT);
+  const encoder = new TextEncoder();
 
-    // ── PASO 3: Username-level blocklist filter ────────────────────────────
-    console.log(`[tiktok-to-ig] ── PASO 3: Username filter`);
-    const candidates = filterUsernames(tiktokUsernames);
-    console.log(`[tiktok-to-ig] Username filter: ${tiktokUsernames.length} → ${candidates.length} candidatos`);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`)); }
+        catch { /* client disconnected */ }
+      };
 
-    if (candidates.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: { hashtagPostsFound: tiktokUsernames.length, afterPreFilter: 0, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-      });
-    }
+      try {
+        // PASO 1: TikTok scraper → unique author usernames
+        console.log(`\n[tiktok-to-ig] ── PASO 1: TikTok scraper — [${hashtags.join(', ')}]`);
+        const tiktokUsernames = await scrapeByTikTok(hashtags, TIKTOK_POSTS_LIMIT);
 
-    // ── PASO 4: Instagram profile scraper ─────────────────────────────────
-    console.log(`[tiktok-to-ig] ── PASO 4: Instagram profile scraper (${candidates.length} usernames)`);
-    const profiles = await scrapeProfiles(candidates);
-    console.log(`[tiktok-to-ig] Instagram found ${profiles.length}/${candidates.length} matching profiles`);
+        // PASO 2: Username-level blocklist filter
+        console.log(`[tiktok-to-ig] ── PASO 2: Username filter`);
+        const candidates = filterUsernames(tiktokUsernames);
+        console.log(`[tiktok-to-ig] Username filter: ${tiktokUsernames.length} → ${candidates.length} candidatos`);
 
-    // ── PASO 5a: Follower filter (30K-100K) ───────────────────────────────
-    console.log(`[tiktok-to-ig] ── PASO 5a: Follower filter`);
-    const filteredProfiles = postProfileFilter(profiles);
-    console.log(`[tiktok-to-ig] Follower filter: ${profiles.length} → ${filteredProfiles.length}`);
+        if (candidates.length === 0) {
+          send({ type: 'complete', stats: { hashtagPostsFound: tiktokUsernames.length, afterPreFilter: 0, afterQualityFilter: 0 } });
+          controller.close();
+          return;
+        }
 
-    if (filteredProfiles.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: {
-          hashtagPostsFound:  tiktokUsernames.length,
-          afterPreFilter:     candidates.length,
-          afterProfileFilter: 0,
-          afterPresetFilter:  0,
-          final:              0,
-        },
-      });
-    }
+        // PASO 3: Instagram profile scraper
+        console.log(`[tiktok-to-ig] ── PASO 3: Instagram profile scraper (${candidates.length} usernames)`);
+        const profiles = await scrapeProfiles(candidates);
+        console.log(`[tiktok-to-ig] Instagram found ${profiles.length}/${candidates.length} matching profiles`);
 
-    // ── PASO 5b: Gemini scoring + clasificación ────────────────────────────
-    console.log(`[tiktok-to-ig] ── PASO 5b: Gemini scoring (${filteredProfiles.length} perfiles)`);
+        // PASO 4: Quality filter
+        const quality = postProfileFilter(profiles);
+        console.log(`[tiktok-to-ig] Quality filter: ${profiles.length} → ${quality.length}`);
 
-    const scored: ScoredInfluencer[] = [];
-    for (const profile of filteredProfiles) {
-      const result = await scoreInfluencer(profile, 0); // engagement calculated later
-      scored.push({ ...profile, ...result, engagementRate: 0 });
-      console.log(
-        `[tiktok-to-ig] Scored @${profile.username} → ${result.score} | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
-      );
+        send({
+          type: 'profiled',
+          profiles: quality,
+          stats: { hashtagPostsFound: tiktokUsernames.length, afterPreFilter: candidates.length, afterQualityFilter: quality.length },
+        });
 
-      cacheInfluencer({
-        username:        profile.username,
-        full_name:       profile.fullName,
-        profile_pic:     profile.profilePicUrl,
-        bio:             profile.biography,
-        followers_count: profile.followersCount,
-        match_score:     result.score,
-        ai_category:     result.niche,
-        ai_reason:       result.reason,
-      }).catch((err) => console.error(`[tiktok-to-ig] cacheInfluencer failed for @${profile.username}:`, err));
+        if (quality.length === 0) {
+          send({ type: 'complete', stats: { hashtagPostsFound: tiktokUsernames.length, afterPreFilter: candidates.length, afterQualityFilter: 0 } });
+          controller.close();
+          return;
+        }
 
-      await new Promise((r) => setTimeout(r, 4_000));
-    }
+        // PASO 5: Gemini scoring — one event per profile
+        console.log(`[tiktok-to-ig] ── PASO 5: Scoring ${quality.length} perfiles`);
 
-    // ── PASO 6: Preset filter ──────────────────────────────────────────────
-    const allScored      = [...scored].sort((a, b) => b.score - a.score);
-    const presetFiltered = scored.filter(passesPresetFilter);
-    console.log(`[tiktok-to-ig] Preset filter: ${scored.length} → ${presetFiltered.length}`);
+        for (const profile of quality) {
+          const result = await scoreInfluencer(profile, 0);
+          console.log(`[tiktok-to-ig] Scored @${profile.username} → ${result.score} (${result.label})`);
 
-    // ── PASO 7: Sort by score ──────────────────────────────────────────────
-    const sorted = presetFiltered.sort((a, b) => b.score - a.score);
-    console.log(`[tiktok-to-ig] ✓ Done — ${sorted.length} influencers ranked`);
+          send({
+            type:          'scored',
+            username:      profile.username,
+            score:         result.score,
+            label:         result.label,
+            niche:         result.niche,
+            gender:        result.gender,
+            estimatedAge:  result.estimatedAge,
+            inferredCity:  result.inferredCity,
+            engagementRate: 0,
+          });
 
-    return NextResponse.json({
-      influencers: sorted,
-      allScored,
-      stats: {
-        hashtagPostsFound:  tiktokUsernames.length,
-        afterPreFilter:     candidates.length,
-        afterProfileFilter: filteredProfiles.length,
-        afterPresetFilter:  presetFiltered.length,
-        final:              sorted.length,
-      },
-    });
-  } catch (err) {
-    console.error('[tiktok-to-ig] Error:', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  }
+          cacheInfluencer({
+            username:        profile.username,
+            full_name:       profile.fullName,
+            profile_pic:     profile.profilePicUrl,
+            bio:             profile.biography,
+            followers_count: profile.followersCount,
+            engagement_rate: 0,
+            match_score:     result.score,
+            ai_category:     result.niche,
+            ai_reason:       result.reason,
+          }).catch((err) => console.error(`[tiktok-to-ig] cacheInfluencer failed:`, err));
+
+          await new Promise((r) => setTimeout(r, 4_000));
+        }
+
+        send({ type: 'complete', stats: { hashtagPostsFound: tiktokUsernames.length, afterPreFilter: candidates.length, afterQualityFilter: quality.length } });
+        console.log(`[tiktok-to-ig] ✓ Done`);
+        controller.close();
+
+      } catch (err) {
+        console.error('[tiktok-to-ig] Error:', err);
+        send({ type: 'error', message: (err as Error).message });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache, no-transform',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
