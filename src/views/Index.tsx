@@ -173,8 +173,9 @@ const Index = () => {
     if (discoverMode === 'hashtag') {
       runDiscover({ resultsType: discoverMediaType, mode: 'hashtag', customHashtags: raw });
     } else {
-      if (raw.length === 0) return;
-      runDiscover({ mode: 'username', usernames: raw });
+      const seedUsername = raw[0];
+      if (!seedUsername) return;
+      runDiscover({ mode: 'username', seedUsername });
     }
   };
 
@@ -251,10 +252,15 @@ const Index = () => {
       : hasSearchData     ? `${filteredSearchCards.length} of ${searchTotal} profiles match filters`
       :                     "Enter hashtags to search for influencers"
     : searchMode === 'discovery'
-      ? isDiscovering        ? "Scraping Miami locations…"
-      : isDiscoverScoring     ? `${discoverScoredCount} / ${discoverTotal} scored by Gemini…`
-      : hasDiscoverData       ? `${filteredDiscoverCards.length} of ${discoverTotal} profiles match filters`
-      :                         "Click Discover to scan Miami locations for influencers"
+      ? isDiscovering
+          ? discoverActiveMode === 'username'
+            ? discoverStats?.relatedHashtags
+              ? `Scraping hashtags: ${discoverStats.relatedHashtags.map(t => `#${t}`).join(', ')}…`
+              : `Analizando posts del seed…`
+            : "Scraping Miami locations…"
+          : isDiscoverScoring     ? `${discoverScoredCount} / ${discoverTotal} scored by Gemini…`
+          : hasDiscoverData       ? `${filteredDiscoverCards.length} of ${discoverTotal} profiles match filters`
+          :                         "Click Discover to scan Miami locations for influencers"
     : searchMode === 'tiktok'
       ? isTikToking       ? "Searching TikTok → cross-referencing Instagram…"
       : isTikTokScoring    ? `${tiktokScored} / ${tiktokTotal} scored by Gemini…`
@@ -652,7 +658,7 @@ const Index = () => {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <span className="font-semibold leading-none">@</span> Usernames
+                  <span className="font-semibold leading-none">@</span> Similares
                 </button>
               </div>
 
@@ -675,7 +681,7 @@ const Index = () => {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
                     <input
                       type="text"
-                      placeholder="handle1, handle2, handle3…"
+                      placeholder="handle de referencia, ej: nicolehibbard1970"
                       value={discoverSearchInput}
                       onChange={(e) => setDiscoverSearchInput(e.target.value)}
                       disabled={isDiscoverBusy}
@@ -766,7 +772,12 @@ const Index = () => {
             <div className="text-xs text-muted-foreground leading-relaxed mb-4">
               {discoverActiveMode === 'username' ? (
                 <>
-                  <span className="font-medium">{discoverStats.afterPreFilter}</span> usernames
+                  <span className="font-medium">{discoverStats.seedPostsAnalyzed ?? '—'}</span> posts del seed
+                  {discoverStats.relatedHashtags?.length ? (
+                    <>{" → "}{discoverStats.relatedHashtags.map(t => `#${t}`).join(', ')}</>
+                  ) : null}
+                  {" → "}<span className="font-medium">{discoverStats.hashtagPostsFound}</span> posts scrapeados
+                  {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> candidatos
                   {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
                 </>
               ) : (
@@ -911,12 +922,13 @@ const Index = () => {
                 </>
               ) : (
                 <>
-                  <p className="font-medium text-foreground mb-2">Modo @ Usernames — Miami Discovery</p>
+                  <p className="font-medium text-foreground mb-2">Modo @ Similares — Miami Discovery</p>
                   <ul className="space-y-1 list-disc list-inside">
-                    <li>Ingresá usernames de Instagram directamente (handle1, handle2…)</li>
-                    <li>Se saltea el scraping de hashtags — Apify va directo al profile scraper</li>
-                    <li>Ideal para analizar una lista de cuentas conocidas o candidatos específicos</li>
-                    <li>Gemini score, género, edad y ciudad funcionan igual que en el modo hashtag</li>
+                    <li>Ingresá el username de una influencer como referencia (una sola cuenta)</li>
+                    <li>Analizamos sus últimos <strong>6 posts</strong> y extraemos los <strong>4 hashtags</strong> más usados</li>
+                    <li>Buscamos cuentas que usen esos mismos hashtags (<strong>10 posts por hashtag</strong>, ~40 total)</li>
+                    <li>Se perfilarán hasta <strong>20 cuentas</strong> similares — límite para no consumir créditos de Apify</li>
+                    <li>Gemini score, género, edad y ciudad igual que en modo hashtag</li>
                   </ul>
                 </>
               )}

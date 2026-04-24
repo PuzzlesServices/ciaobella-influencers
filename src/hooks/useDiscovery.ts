@@ -6,9 +6,11 @@ const STORAGE_KEY = 'crown_last_discovery_search';
 export type DiscoverStage = 'idle' | 'scanning' | 'scoring' | 'done' | 'error';
 
 export interface DiscoverStats {
-  hashtagPostsFound:  number;
-  afterPreFilter:     number;
-  afterQualityFilter: number;
+  hashtagPostsFound:   number;
+  afterPreFilter:      number;
+  afterQualityFilter:  number;
+  seedPostsAnalyzed?:  number;
+  relatedHashtags?:    string[];
 }
 
 export interface ScoreData {
@@ -108,12 +110,14 @@ export function useDiscovery() {
     mode = 'hashtag',
     customHashtags = [],
     usernames = [],
+    seedUsername = '',
   }: {
     seeds?: string[];
     resultsType?: 'posts' | 'reels';
     mode?: 'hashtag' | 'username';
     customHashtags?: string[];
     usernames?: string[];
+    seedUsername?: string;
   }) => {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -129,7 +133,7 @@ export function useDiscovery() {
       const res = await fetch('/api/discover', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ seeds, resultsType, mode, customHashtags, usernames }),
+        body:    JSON.stringify({ seeds, resultsType, mode, customHashtags, usernames, seedUsername }),
         signal:  abortRef.current.signal,
       });
 
@@ -158,7 +162,16 @@ export function useDiscovery() {
           try {
             const event = JSON.parse(line.slice(6));
 
-            if (event.type === 'profiled') {
+            if (event.type === 'hashtags_resolved') {
+              setStats((prev) => ({
+                hashtagPostsFound:  prev?.hashtagPostsFound ?? 0,
+                afterPreFilter:     prev?.afterPreFilter ?? 0,
+                afterQualityFilter: prev?.afterQualityFilter ?? 0,
+                seedPostsAnalyzed:  event.seedPostsAnalyzed as number,
+                relatedHashtags:    event.relatedHashtags as string[],
+              }));
+
+            } else if (event.type === 'profiled') {
               lastProfiles = event.profiles as InstagramProfile[];
               setProfiles(lastProfiles);
               setStats(event.stats as DiscoverStats);

@@ -1,10 +1,10 @@
 import { NextRequest } from 'next/server';
-import { scrapeByMiamiLocations, scrapeHashtags, scrapeProfiles } from '@/server/services/apify';
+import { scrapeByMiamiLocations, scrapeHashtags, scrapeProfiles, scrapeUserPosts } from '@/server/services/apify';
 import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { DiscoverRequest, HashtagPost } from '@/server/types';
+import { DiscoverRequest, HashtagPost, UserPost } from '@/server/types';
 
 export const maxDuration = 300;
 
@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
     mode = 'hashtag',
     customHashtags = [],
     usernames: requestUsernames = [],
+    seedUsername: requestSeedUsername = '',
   }: DiscoverRequest = await req.json();
 
   const encoder = new TextEncoder();
@@ -32,19 +33,89 @@ export async function POST(req: NextRequest) {
       try {
         let candidateUsernames: string[] = [];
         let postsForEngagement: HashtagPost[] = [];
-        const stats = { hashtagPostsFound: 0, afterPreFilter: 0, afterQualityFilter: 0 };
+        const stats: {
+          hashtagPostsFound: number;
+          afterPreFilter: number;
+          afterQualityFilter: number;
+          seedPostsAnalyzed?: number;
+          relatedHashtags?: string[];
+        } = { hashtagPostsFound: 0, afterPreFilter: 0, afterQualityFilter: 0 };
+
+        // Límites para controlar el uso de Apify en modo similar
+        const SIMILAR_SEED_POSTS    = 6;   // posts a scrapear del seed
+        const SIMILAR_TOP_HASHTAGS  = 4;   // hashtags más usados del seed
+        const SIMILAR_POSTS_PER_TAG = 10;  // posts por hashtag (~40 total)
+        const SIMILAR_MAX_PROFILES  = 20;  // candidatos máximos a perfilar
 
         if (mode === 'username') {
-          // ── Modo username: lookup directo, sin hashtag scraping ────────────
-          const cleaned = requestUsernames.map((u) => u.replace(/^@/, '').trim()).filter(Boolean);
-          if (cleaned.length === 0) {
-            send({ type: 'error', message: 'No usernames provided' });
+          // ── Modo similar: analiza el seed → descubre cuentas similares ─────
+          const seedUser = requestSeedUsername.replace(/^@/, '').trim()
+            || requestUsernames[0]?.replace(/^@/, '').trim()
+            || '';
+
+          if (!seedUser) {
+            send({ type: 'error', message: 'No seed username provided' });
             controller.close();
             return;
           }
-          console.log(`\n[discover] ── Modo @username: ${cleaned.length} usernames`);
-          candidateUsernames  = cleaned;
-          stats.afterPreFilter = cleaned.length;
+
+          console.log(`\n[discover] ── Modo @similar: seed=${seedUser}`);
+
+          // Paso 1: últimos posts del seed para extraer hashtags
+          const seedPosts: UserPost[] = await scrapeUserPosts(seedUser, SIMILAR_SEED_POSTS);
+
+          if (seedPosts.length === 0) {
+            send({ type: 'error', message: `No se encontraron posts para @${seedUser}` });
+            controller.close();
+            return;
+          }
+
+          // Paso 2: frecuencia de hashtags (array del scraper + regex fallback en caption)
+          const hashtagFreq: Record<string, number> = {};
+          for (const post of seedPosts) {
+            const tags: string[] =
+              (post.hashtags && post.hashtags.length > 0)
+                ? post.hashtags
+                : ((post.caption ?? '').match(/#([\w]+)/g) ?? []).map((t) => t.slice(1));
+
+            for (const raw of tags) {
+              const t = raw.toLowerCase().replace(/^#/, '').trim();
+              if (t) hashtagFreq[t] = (hashtagFreq[t] ?? 0) + 1;
+            }
+          }
+
+          // Paso 3: top hashtags por frecuencia
+          const relatedHashtags = Object.entries(hashtagFreq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, SIMILAR_TOP_HASHTAGS)
+            .map(([tag]) => tag);
+
+          console.log(`[discover] @${seedUser} — ${seedPosts.length} posts analizados, hashtags: [${relatedHashtags.join(', ')}]`);
+
+          if (relatedHashtags.length === 0) {
+            send({ type: 'error', message: `@${seedUser} no usa hashtags en sus posts recientes` });
+            controller.close();
+            return;
+          }
+
+          // Notificar al cliente los hashtags encontrados (antes del scraping pesado)
+          stats.seedPostsAnalyzed = seedPosts.length;
+          stats.relatedHashtags   = relatedHashtags;
+          send({ type: 'hashtags_resolved', seedPostsAnalyzed: seedPosts.length, relatedHashtags });
+
+          // Paso 4: scraping de hashtags relacionados (10 posts c/u, ~40 total)
+          const posts = await scrapeHashtags(relatedHashtags, SIMILAR_POSTS_PER_TAG, 'posts');
+          postsForEngagement      = posts;
+          stats.hashtagPostsFound = posts.length;
+
+          // Paso 5: preFilter + excluir el seed + cap de perfiles
+          const fromHashtags = preFilter(posts)
+            .filter((u) => u.toLowerCase() !== seedUser.toLowerCase());
+
+          console.log(`[discover] Similar pre-filtro: ${posts.length} posts → ${fromHashtags.length} candidatos (excl. seed)`);
+
+          candidateUsernames   = fromHashtags.slice(0, SIMILAR_MAX_PROFILES);
+          stats.afterPreFilter = candidateUsernames.length;
 
         } else {
           // ── Modo hashtag: scrape → preFilter → combinar seeds ──────────────

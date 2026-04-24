@@ -40,6 +40,8 @@ export interface UserPost {
   commentsCount: number;
   videoViewCount?: number;
   timestamp?: string;
+  caption?: string;
+  hashtags?: string[];
 }
 
 export interface SearchRequest {
@@ -55,6 +57,7 @@ export interface DiscoverRequest {
   mode?: 'hashtag' | 'username';
   customHashtags?: string[];
   usernames?: string[];
+  seedUsername?: string;
 }
 
 export interface TikTokRequest {
