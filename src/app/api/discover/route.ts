@@ -4,49 +4,14 @@ import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
 import { scoreInfluencer } from '@/server/services/gemini';
 import { cacheInfluencer } from '@/server/db/influencers';
-import { DiscoverRequest, DiscoverFilters, ScoredInfluencer } from '@/server/types';
+import { DiscoverRequest } from '@/server/types';
 
 export const maxDuration = 300;
 
 const LOCATION_POSTS_LIMIT = 50;
 
-function resolveGenderAllowed(gender?: DiscoverFilters['gender']): string[] {
-  if (!gender || gender === 'any') return ['female', 'male', 'unknown'];
-  if (gender === 'male') return ['male', 'unknown'];
-  return ['female', 'unknown'];
-}
-
-function resolveAgeBuckets(min = 25, max = 60): string[] {
-  const buckets: string[] = ['unknown'];
-  if (min <= 24) buckets.push('under25');
-  if (min <= 34 && max >= 25) buckets.push('25-34');
-  if (min <= 44 && max >= 35) buckets.push('35-44');
-  if (min <= 60 && max >= 45) buckets.push('45-60');
-  if (max > 60) buckets.push('over60');
-  return buckets;
-}
-
-function buildPassesFilter(genderAllowed: string[], ageAllowed: string[], targetCity: string) {
-  return function passesFilter(s: ScoredInfluencer): boolean {
-    if (s.gender && !genderAllowed.includes(s.gender)) return false;
-    if (s.estimatedAge && !ageAllowed.includes(s.estimatedAge)) return false;
-    const city = (s.inferredCity ?? '').toLowerCase().trim();
-    if (city && city !== 'unknown' && !city.includes(targetCity)) return false;
-    if (s.gender === 'unknown' && s.estimatedAge === 'unknown' && s.score < 40) return false;
-    return true;
-  };
-}
-
 export async function POST(req: NextRequest) {
-  const { seeds = [], filters }: DiscoverRequest = await req.json();
-
-  const followersMin  = filters?.followersMin ?? 30_000;
-  const followersMax  = filters?.followersMax ?? 100_000;
-  const targetCity    = (filters?.city ?? 'miami').toLowerCase().trim();
-  const genderAllowed = resolveGenderAllowed(filters?.gender);
-  const ageAllowed    = resolveAgeBuckets(filters?.ageMin, filters?.ageMax);
-  const passesFilter  = buildPassesFilter(genderAllowed, ageAllowed, targetCity);
-  const resultsType   = filters?.resultsType ?? 'posts';
+  const { seeds = [], resultsType = 'posts' }: DiscoverRequest = await req.json();
 
   const cleanedSeeds = seeds.map((s) => s.replace(/^@/, '').trim()).filter(Boolean);
 
@@ -57,73 +22,55 @@ export async function POST(req: NextRequest) {
       const send = (data: object) => {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-        } catch {
-          // client disconnected
-        }
+        } catch { /* client disconnected */ }
       };
 
       try {
-        // ── PASO 1: Scrape Miami location posts ────────────────────────────
+        // ── PASO 1: Scrape location posts ──────────────────────────────────
         console.log(`\n[discover] ── PASO 1: location scraper (${LOCATION_POSTS_LIMIT} ${resultsType})`);
         const posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT, resultsType);
 
         // ── PASO 2: Pre-filtro ─────────────────────────────────────────────
-        console.log(`[discover] ── PASO 2: Pre-filtro`);
         const fromLocations = preFilter(posts);
         console.log(`[discover] Pre-filtro: ${posts.length} posts → ${fromLocations.length} candidatos`);
 
         const allCandidates = Array.from(new Set([...fromLocations, ...cleanedSeeds]));
-        if (cleanedSeeds.length > 0) {
-          console.log(`[discover] Seeds añadidos: ${cleanedSeeds.join(', ')} → total: ${allCandidates.length}`);
-        }
 
         if (allCandidates.length === 0) {
-          send({
-            type: 'complete',
-            influencers: [],
-            allScored: [],
-            stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-          });
+          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterQualityFilter: 0 } });
           controller.close();
           return;
         }
 
-        // ── PASO 3: Apify Profile Scraper ──────────────────────────────────
+        // ── PASO 3: Profile scraper ────────────────────────────────────────
         console.log(`[discover] ── PASO 3: Profile scraper (${allCandidates.length} candidatos)`);
         const profiles = await scrapeProfiles(allCandidates);
 
-        // ── PASO 4: Post-profile filter ────────────────────────────────────
-        console.log(`[discover] ── PASO 4: Post-profile filter (${followersMin / 1000}K–${followersMax / 1000}K)`);
-        const filteredProfiles = postProfileFilter(profiles, followersMin, followersMax);
-        console.log(`[discover] Post-filtro: ${profiles.length} → ${filteredProfiles.length} perfiles`);
+        // ── PASO 4: Quality filter (sin rango de seguidores — es client-side) ──
+        const qualityFiltered = postProfileFilter(profiles);
+        console.log(`[discover] Quality filter: ${profiles.length} → ${qualityFiltered.length} perfiles`);
 
-        // ── Enviar perfiles al cliente de inmediato ────────────────────────
+        // ── Enviar todos los perfiles al cliente de inmediato ──────────────
         send({
           type: 'profiled',
-          profiles: filteredProfiles,
+          profiles: qualityFiltered,
           stats: {
             hashtagPostsFound:  posts.length,
             afterPreFilter:     allCandidates.length,
-            afterProfileFilter: filteredProfiles.length,
+            afterQualityFilter: qualityFiltered.length,
           },
         });
 
-        if (filteredProfiles.length === 0) {
-          send({
-            type: 'complete',
-            influencers: [],
-            allScored: [],
-            stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-          });
+        if (qualityFiltered.length === 0) {
+          send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterQualityFilter: 0 } });
           controller.close();
           return;
         }
 
-        // ── PASO 5: Gemini scoring ─────────────────────────────────────────
-        console.log(`[discover] ── PASO 5: Scoring ${filteredProfiles.length} perfiles con Gemini`);
+        // ── PASO 5: Gemini scoring — un evento por perfil ─────────────────
+        console.log(`[discover] ── PASO 5: Scoring ${qualityFiltered.length} perfiles con Gemini`);
 
-        const scored: ScoredInfluencer[] = [];
-        for (const profile of filteredProfiles) {
+        for (const profile of qualityFiltered) {
           const postData = posts.find(
             (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
           );
@@ -133,10 +80,22 @@ export async function POST(req: NextRequest) {
               : 0;
 
           const result = await scoreInfluencer(profile, engagementRate);
-          scored.push({ ...profile, ...result, engagementRate });
           console.log(
             `[discover] Scored @${profile.username} → ${result.score} (${result.label}) | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
           );
+
+          // Enviar score individual para que el card se actualice en tiempo real
+          send({
+            type:          'scored',
+            username:      profile.username,
+            score:         result.score,
+            label:         result.label,
+            niche:         result.niche,
+            gender:        result.gender,
+            estimatedAge:  result.estimatedAge,
+            inferredCity:  result.inferredCity,
+            engagementRate,
+          });
 
           cacheInfluencer({
             username:        profile.username,
@@ -153,26 +112,8 @@ export async function POST(req: NextRequest) {
           await new Promise((r) => setTimeout(r, 4_000));
         }
 
-        // ── PASO 6: Filter + sort ──────────────────────────────────────────
-        const allScored      = [...scored].sort((a, b) => b.score - a.score);
-        const presetFiltered = scored.filter(passesFilter).sort((a, b) => b.score - a.score);
-        console.log(
-          `[discover] Filter: ${scored.length} → ${presetFiltered.length} (gender:${genderAllowed.join('/')} · city:${targetCity})`
-        );
-        console.log(`[discover] ✓ Done — ${presetFiltered.length} influencers ranked`);
-
-        send({
-          type: 'complete',
-          influencers: presetFiltered,
-          allScored,
-          stats: {
-            hashtagPostsFound:  posts.length,
-            afterPreFilter:     allCandidates.length,
-            afterProfileFilter: filteredProfiles.length,
-            afterPresetFilter:  presetFiltered.length,
-            final:              presetFiltered.length,
-          },
-        });
+        send({ type: 'complete', stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterQualityFilter: qualityFiltered.length } });
+        console.log(`[discover] ✓ Done`);
 
         controller.close();
       } catch (err) {
@@ -185,9 +126,9 @@ export async function POST(req: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      'Content-Type':    'text/event-stream',
-      'Cache-Control':   'no-cache, no-transform',
-      'Connection':      'keep-alive',
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache, no-transform',
+      'Connection':        'keep-alive',
       'X-Accel-Buffering': 'no',
     },
   });

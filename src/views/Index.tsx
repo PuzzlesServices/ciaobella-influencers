@@ -57,16 +57,16 @@ const Index = () => {
 
   const {
     runDiscover,
-    reset:      resetDiscover,
-    stage:      discoverStage,
-    profiled:   discoverProfiled,
-    aiVerified: discoverAiVerified,
-    allScored:  discoverAllScored,
-    stats:      discoverStats,
-    isScanning: isDiscovering,
-    isScoring:  isDiscoverScoring,
-    isError:    isDiscoverError,
-    error:      discoverError,
+    reset:        resetDiscover,
+    stage:        discoverStage,
+    cards:        discoverCards,
+    stats:        discoverStats,
+    scoredCount:  discoverScoredCount,
+    totalProfiles: discoverTotal,
+    isScanning:   isDiscovering,
+    isScoring:    isDiscoverScoring,
+    isError:      isDiscoverError,
+    error:        discoverError,
   } = useDiscovery();
 
   const {
@@ -83,46 +83,54 @@ const Index = () => {
 
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
 
-  const isPending   = isSearching || isDiscovering || isTikToking || isTikTokingNative;
+  const isPending      = isSearching || isDiscovering || isTikToking || isTikTokingNative;
   const isDiscoverBusy = isDiscovering || isDiscoverScoring;
-
-  const isError     = searchMode === 'hashtag'       ? isSearchError
-                    : searchMode === 'discovery'     ? isDiscoverError
-                    : searchMode === 'tiktok'        ? isTikTokError
-                    :                                  isTikTokNativeError;
-  const activeError = searchMode === 'hashtag'       ? searchError
-                    : searchMode === 'discovery'     ? discoverError
-                    : searchMode === 'tiktok'        ? tiktokError
-                    :                                  tiktokNativeError;
-
-  // Adapter so discovery mode stays compatible with the shared activeResult shape
   const hasDiscoverData = discoverStage === 'scoring' || discoverStage === 'done';
-  const discoverResult = hasDiscoverData ? {
-    influencers: discoverAiVerified,
-    allProfiled: discoverAllScored.length > 0 ? discoverAllScored : discoverProfiled,
-    stats: {
-      hashtagPostsFound:  discoverStats?.hashtagPostsFound  ?? 0,
-      afterPreFilter:     discoverStats?.afterPreFilter     ?? 0,
-      afterProfileFilter: discoverStats?.afterProfileFilter ?? 0,
-      afterPresetFilter:  discoverStats?.afterPresetFilter  ?? 0,
-      final:              discoverStats?.final              ?? 0,
-    },
-  } : null;
 
-  const activeResult = searchMode === 'hashtag'      ? searchResult
-                     : searchMode === 'discovery'    ? discoverResult
-                     : searchMode === 'tiktok'       ? tiktokResult
-                     :                                 tiktokNativeResult;
+  const isError     = searchMode === 'hashtag'   ? isSearchError
+                    : searchMode === 'discovery'  ? isDiscoverError
+                    : searchMode === 'tiktok'     ? isTikTokError
+                    :                               isTikTokNativeError;
+  const activeError = searchMode === 'hashtag'   ? searchError
+                    : searchMode === 'discovery'  ? discoverError
+                    : searchMode === 'tiktok'     ? tiktokError
+                    :                               tiktokNativeError;
 
-  // Discovery: during scoring show profiled cards; after done use selected tab
-  const discoverDisplayed = isDiscoverScoring
-    ? discoverProfiled
-    : showAll
-      ? (discoverResult?.allProfiled ?? [])
-      : (discoverResult?.influencers ?? []);
+  const activeResult = searchMode === 'hashtag'  ? searchResult
+                     : searchMode === 'tiktok'   ? tiktokResult
+                     :                             tiktokNativeResult;
+
+  // ── Discovery client-side filter ──────────────────────────────────────────
+  // Applied live to discoverCards without re-fetching anything
+  const filteredDiscoverCards = discoverCards.filter((card) => {
+    // Followers: data available from Apify — always applies
+    if (card.followersCount < discoverFollMin * 1_000) return false;
+    if (card.followersCount > discoverFollMax * 1_000) return false;
+
+    // Gender / age / city: only once scored (unknown = passes)
+    if (!card.isScoring) {
+      if (discoverGender !== 'any') {
+        const g = card.gender;
+        if (g && g !== 'unknown' && g !== discoverGender) return false;
+      }
+      const ageBucketRanges: Record<string, [number, number]> = {
+        'under25': [0,  24], '25-34': [25, 34],
+        '35-44':   [35, 44], '45-60': [45, 60], 'over60': [61, 99],
+      };
+      if (card.estimatedAge && card.estimatedAge !== 'unknown') {
+        const r = ageBucketRanges[card.estimatedAge];
+        if (r && (r[1] < discoverAgeMin || r[0] > discoverAgeMax)) return false;
+      }
+      if (discoverCity) {
+        const city = (card.inferredCity ?? '').toLowerCase();
+        if (city && city !== 'unknown' && !city.includes(discoverCity.toLowerCase())) return false;
+      }
+    }
+    return true;
+  });
 
   const allInfluencers: Influencer[] = searchMode === 'discovery'
-    ? discoverDisplayed
+    ? [] // discovery uses filteredDiscoverCards directly — see `displayed` below
     : showAll
       ? (activeResult?.allProfiled ?? [])
       : (activeResult?.influencers ?? []);
@@ -149,18 +157,7 @@ const Index = () => {
   };
 
   const handleDiscover = () => {
-    runDiscover({
-      seeds: parseSeeds(),
-      filters: {
-        gender:       discoverGender,
-        ageMin:       discoverAgeMin,
-        ageMax:       discoverAgeMax,
-        followersMin: discoverFollMin * 1_000,
-        followersMax: discoverFollMax * 1_000,
-        city:         discoverCity,
-        resultsType:  discoverMediaType,
-      },
-    });
+    runDiscover({ seeds: parseSeeds(), resultsType: discoverMediaType });
   };
 
   const parseTikTokTags = () =>
@@ -206,44 +203,54 @@ const Index = () => {
 
   // ── Displayed results ─────────────────────────────────────────────────────
 
-  const displayed = allInfluencers
-    .filter((i) => {
-      if (!filter) return true;
-      const q = filter.toLowerCase();
-      return (
-        i.name.toLowerCase().includes(q) ||
-        i.username.toLowerCase().includes(q) ||
-        i.niche.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => {
-      if (sortBy === "match") return b.matchScore - a.matchScore;
-      if (sortBy === "engagement") return parseFloat(b.engagement) - parseFloat(a.engagement);
-      if (sortBy === "followers") {
-        const parse = (s: string) => {
-          if (s.endsWith("M")) return parseFloat(s) * 1_000_000;
-          if (s.endsWith("K")) return parseFloat(s) * 1_000;
-          return parseFloat(s);
-        };
-        return parse(b.followers) - parse(a.followers);
-      }
-      return 0;
-    });
+  const displayed = searchMode === 'discovery'
+    // Discovery: filteredDiscoverCards sorted — unscored at the end
+    ? [...filteredDiscoverCards].sort((a, b) => {
+        if (a.isScoring && !b.isScoring) return 1;
+        if (!a.isScoring && b.isScoring) return -1;
+        return (b.score ?? 0) - (a.score ?? 0);
+      })
+    : allInfluencers
+        .filter((i) => {
+          if (!filter) return true;
+          const q = filter.toLowerCase();
+          return (
+            i.name.toLowerCase().includes(q) ||
+            i.username.toLowerCase().includes(q) ||
+            i.niche.toLowerCase().includes(q)
+          );
+        })
+        .sort((a, b) => {
+          if (sortBy === "match") return b.matchScore - a.matchScore;
+          if (sortBy === "engagement") return parseFloat(b.engagement) - parseFloat(a.engagement);
+          if (sortBy === "followers") {
+            const parse = (s: string) => {
+              if (s.endsWith("M")) return parseFloat(s) * 1_000_000;
+              if (s.endsWith("K")) return parseFloat(s) * 1_000;
+              return parseFloat(s);
+            };
+            return parse(b.followers) - parse(a.followers);
+          }
+          return 0;
+        });
 
   // ── Status text ───────────────────────────────────────────────────────────
 
   const statusText = isPending
-    ? searchMode === 'hashtag'        ? "Searching Instagram…"
-    : searchMode === 'discovery'      ? "Scraping Miami locations…"
-    : searchMode === 'tiktok'         ? "Searching TikTok → cross-referencing Instagram…"
-    :                                   "Scraping TikTok videos and scoring creators…"
+    ? searchMode === 'hashtag'   ? "Searching Instagram…"
+    : searchMode === 'discovery' ? "Scraping Miami locations…"
+    : searchMode === 'tiktok'    ? "Searching TikTok → cross-referencing Instagram…"
+    :                              "Scraping TikTok videos and scoring creators…"
     : searchMode === 'discovery' && isDiscoverScoring
-    ? `${discoverProfiled.length} profiles found — AI scoring in progress…`
+    ? `${discoverScoredCount} / ${discoverTotal} scored by Gemini…`
+    : searchMode === 'discovery' && hasDiscoverData
+    ? `${filteredDiscoverCards.length} of ${discoverTotal} profiles match filters`
+    : searchMode === 'discovery'
+    ? "Click Discover to scan Miami locations for influencers"
     : !activeResult
-    ? searchMode === 'hashtag'        ? "Enter hashtags to search for influencers"
-    : searchMode === 'discovery'      ? "Click Discover to scan Miami locations for influencers"
-    : searchMode === 'tiktok'         ? "Click Search to find Miami influencers via TikTok"
-    :                                   "Enter hashtags to find viral TikTok creators"
+    ? searchMode === 'hashtag' ? "Enter hashtags to search for influencers"
+    : searchMode === 'tiktok'  ? "Click Search to find Miami influencers via TikTok"
+    :                            "Enter hashtags to find viral TikTok creators"
     : `${displayed.length} creator${displayed.length !== 1 ? "s" : ""} found`;
 
   return (
@@ -600,34 +607,15 @@ const Index = () => {
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">{statusText}</p>
               </div>
-              {(activeResult || isDiscoverScoring) && (
+              {(hasDiscoverData || (activeResult && searchMode !== 'discovery')) && (
                 <div className="flex items-center gap-2">
                   {searchMode === 'discovery' ? (
-                    <>
-                      <button
-                        onClick={() => setShowAll(false)}
-                        disabled={isDiscoverScoring}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-40 ${
-                          !showAll && !isDiscoverScoring
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        {isDiscoverScoring
-                          ? 'AI Verified…'
-                          : `AI Verified (${discoverAiVerified.length})`}
-                      </button>
-                      <button
-                        onClick={() => setShowAll(true)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          showAll || isDiscoverScoring
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        All Profiled ({isDiscoverScoring ? discoverProfiled.length : (discoverResult?.allProfiled.length ?? 0)})
-                      </button>
-                    </>
+                    // Discovery: solo muestra el contador, los tabs son los filtros del header
+                    <span className="text-xs text-muted-foreground">
+                      {isDiscoverScoring
+                        ? <><Loader2 className="w-3 h-3 inline animate-spin mr-1" />{discoverScoredCount}/{discoverTotal} scored</>
+                        : `${discoverTotal} profiled · ${filteredDiscoverCards.filter(c => !c.isScoring).length} scored`}
+                    </span>
                   ) : (
                     <>
                       <button
@@ -652,30 +640,37 @@ const Index = () => {
               )}
             </div>
 
-            {(activeResult || isDiscoverScoring) && (
+            {searchMode === 'discovery' && hasDiscoverData && discoverStats && (
               <div className="text-xs text-muted-foreground leading-relaxed mb-4">
-                <span className="font-medium">{discoverStats?.hashtagPostsFound ?? activeResult?.stats.hashtagPostsFound}</span>{' '}
-                {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'discovery' ? 'location posts' : searchMode === 'tiktok' ? 'TikTok authors' : 'TikTok videos'}
-                {" → "}<span className="font-medium">{discoverStats?.afterPreFilter ?? activeResult?.stats.afterPreFilter}</span> pre-filtered
-                {" → "}<span className="font-medium">{discoverStats?.afterProfileFilter ?? activeResult?.stats.afterProfileFilter}</span> profiled
-                {isDiscoverScoring ? (
-                  <> → <Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /> scoring…</>
-                ) : (
-                  <>
-                    {" → "}<span className="font-medium">{activeResult?.stats.afterPresetFilter}</span> AI-verified
-                    {" → "}<span className="font-medium text-foreground">{activeResult?.stats.final}</span> ranked
-                  </>
-                )}
+                <span className="font-medium">{discoverStats.hashtagPostsFound}</span> location posts
+                {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> pre-filtered
+                {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
+                {" → "}
+                {isDiscoverScoring
+                  ? <><Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /><span className="font-medium">{discoverScoredCount}</span>/{discoverTotal} scoring…</>
+                  : <><span className="font-medium text-foreground">{discoverScoredCount}</span> scored · <span className="font-medium text-foreground">{filteredDiscoverCards.length}</span> visible con filtros actuales</>
+                }
               </div>
             )}
 
-            {/* Scoring progress banner */}
+            {searchMode !== 'discovery' && activeResult && (
+              <div className="text-xs text-muted-foreground leading-relaxed mb-4">
+                <span className="font-medium">{activeResult.stats.hashtagPostsFound}</span>{' '}
+                {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'tiktok' ? 'TikTok authors' : 'TikTok videos'}
+                {" → "}<span className="font-medium">{activeResult.stats.afterPreFilter}</span> pre-filtered
+                {" → "}<span className="font-medium">{activeResult.stats.afterProfileFilter}</span> profiled
+                {" → "}<span className="font-medium">{activeResult.stats.afterPresetFilter}</span> AI-verified
+                {" → "}<span className="font-medium text-foreground">{activeResult.stats.final}</span> ranked
+              </div>
+            )}
+
+            {/* Banner de scoring en progress */}
             {searchMode === 'discovery' && isDiscoverScoring && (
               <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm mb-5">
                 <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
                 <span className="text-primary">
-                  <span className="font-medium">Gemini está analizando {discoverProfiled.length} perfiles</span>
-                  {" "}— los resultados AI Verified aparecerán automáticamente al terminar.
+                  <span className="font-medium">Gemini analizando {discoverTotal} perfiles</span>
+                  {" — "}{discoverScoredCount} listos, {discoverTotal - discoverScoredCount} en cola. Los filtros ya funcionan en tiempo real.
                 </span>
               </div>
             )}
@@ -730,7 +725,6 @@ const Index = () => {
               </div>
             )}
 
-            {/* Skeleton: solo durante el scanning inicial (Apify), no durante scoring */}
             {isPending && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -739,12 +733,42 @@ const Index = () => {
               </div>
             )}
 
-            {!isPending && (
+            {!isPending && searchMode === 'discovery' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {(displayed as import('@/hooks/useDiscovery').DiscoverCard[]).map((card) => {
+                  const formatF = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n/1_000)}K` : String(n);
+                  const initials = (card.fullName || card.username).split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase() ?? '').join('');
+                  const loc = [card.city, card.countryCode].filter(Boolean).join(', ') || undefined;
+                  const influencer: Influencer = {
+                    name:          card.fullName || card.username,
+                    username:      `@${card.username}`,
+                    followers:     formatF(card.followersCount),
+                    followersRaw:  card.followersCount,
+                    engagement:    card.engagementRate != null ? `${card.engagementRate.toFixed(1)}%` : '—',
+                    engagementRaw: card.engagementRate ?? null,
+                    matchScore:    card.score ?? -1,
+                    niche:         card.niche ?? '—',
+                    avatar:        initials,
+                    profileUrl:    `https://www.instagram.com/${card.username}/`,
+                    profilePicUrl: card.profilePicUrl,
+                    location:      loc,
+                  };
+                  return <InfluencerCard key={card.username} influencer={influencer} scoring={card.isScoring} />;
+                })}
+                {hasDiscoverData && filteredDiscoverCards.length === 0 && (
+                  <p className="col-span-full text-center text-muted-foreground py-16 text-sm">
+                    Ningún perfil coincide con los filtros actuales.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!isPending && searchMode !== 'discovery' && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {displayed.map((influencer) => (
-                  <InfluencerCard key={influencer.username} influencer={influencer} />
+                  <InfluencerCard key={influencer.username} influencer={influencer as Influencer} />
                 ))}
-                {(activeResult || isDiscoverScoring) && displayed.length === 0 && !isDiscoverScoring && (
+                {activeResult && displayed.length === 0 && (
                   <p className="col-span-full text-center text-muted-foreground py-16 text-sm">
                     No influencers matched the current filters.
                   </p>

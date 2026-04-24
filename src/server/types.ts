@@ -49,19 +49,9 @@ export interface SearchRequest {
   postsLimit?: number;
 }
 
-export interface DiscoverFilters {
-  gender?: 'female' | 'male' | 'any';
-  ageMin?: number;
-  ageMax?: number;
-  followersMin?: number;
-  followersMax?: number;
-  city?: string;
-  resultsType?: 'posts' | 'reels';
-}
-
 export interface DiscoverRequest {
   seeds?: string[];
-  filters?: DiscoverFilters;
+  resultsType?: 'posts' | 'reels';
 }
 
 export interface TikTokRequest {

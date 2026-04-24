@@ -8,6 +8,10 @@ const FULL_NAME_BLOCKLIST = [
   'atelier', 'maison', 'jeweler', 'jeweller', 'goldsmith',
   'accessories', 'accessori', 'bijoux', 'bijouterie',
   'tienda', 'negocio', 'empresa', 'joyeria', 'joyería',
+  // Restaurantes / venues
+  'restaurant', 'grill', 'kitchen', 'bistro', 'eatery', 'diner',
+  'lounge', 'nightclub', 'rooftop', 'steakhouse', 'pizzeria',
+  'bakery', 'cafe', 'café', 'bar & grill', 'sports bar',
   // Media / non-personal accounts
   'news', 'media', 'magazine', 'channel', 'network', 'tv', 'radio',
   'podcast', 'press', 'digital', 'agency', 'group', 'entertainment',
@@ -18,6 +22,9 @@ const USERNAME_BLOCKLIST = [
   'shop', 'store', 'jewel', 'jewelry', 'jewellery', 'diamond',
   'gems', 'boutique', 'official', 'brand', 'studio',
   'design', 'designs', 'collection',
+  // Restaurantes / venues
+  'restaurant', 'grill', 'kitchen', 'lounge', 'nightclub', 'rooftop',
+  'steakhouse', 'bistro', 'eatery', 'diner', 'bakery',
   // Media / non-personal accounts
   'news', 'media', 'magazine', 'channel', 'network', 'tv',
   'radio', 'podcast', 'press', 'agency', 'entertainment',

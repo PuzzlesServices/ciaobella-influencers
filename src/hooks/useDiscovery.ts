@@ -1,131 +1,118 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { type Influencer } from '@/components/InfluencerCard';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { type InstagramProfile } from '@/server/types';
 
 const STORAGE_KEY = 'crown_last_discovery_search';
 
-export interface DiscoverFilters {
-  gender?: 'female' | 'male' | 'any';
-  ageMin?: number;
-  ageMax?: number;
-  followersMin?: number;
-  followersMax?: number;
-  city?: string;
-  resultsType?: 'posts' | 'reels';
-}
-
 export type DiscoverStage = 'idle' | 'scanning' | 'scoring' | 'done' | 'error';
 
 export interface DiscoverStats {
-  hashtagPostsFound: number;
-  afterPreFilter: number;
-  afterProfileFilter: number;
-  afterPresetFilter?: number;
-  final?: number;
+  hashtagPostsFound:  number;
+  afterPreFilter:     number;
+  afterQualityFilter: number;
 }
 
-interface ScoredRaw extends InstagramProfile {
-  score: number;
-  label: string;
-  reason: string;
-  niche: string;
+export interface ScoreData {
+  score:         number;
+  label:         string;
+  niche:         string;
+  gender?:       string;
+  estimatedAge?: string;
+  inferredCity?: string;
   engagementRate: number;
 }
 
-function formatFollowers(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
-  return String(n);
-}
-
-function getInitials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
-}
-
-function baseFields(p: InstagramProfile): Omit<Influencer, 'matchScore' | 'niche' | 'engagement' | 'engagementRaw'> {
-  const locationParts = [p.city, p.countryCode].filter(Boolean);
-  return {
-    name:          p.fullName || p.username,
-    username:      `@${p.username}`,
-    followers:     formatFollowers(p.followersCount),
-    followersRaw:  p.followersCount,
-    avatar:        getInitials(p.fullName || p.username),
-    profileUrl:    `https://www.instagram.com/${p.username}/`,
-    profilePicUrl: p.profilePicUrl,
-    location:      locationParts.length > 0 ? locationParts.join(', ') : undefined,
-  };
-}
-
-function profileToInfluencer(p: InstagramProfile): Influencer {
-  return {
-    ...baseFields(p),
-    matchScore:    -1,   // pending — MatchRing shows '—'
-    niche:         '—',
-    engagement:    '—',
-    engagementRaw: null,
-  };
-}
-
-function scoredToInfluencer(p: ScoredRaw): Influencer {
-  return {
-    ...baseFields(p),
-    matchScore:    p.score,
-    niche:         p.niche,
-    engagement:    `${(p.engagementRate ?? 0).toFixed(1)}%`,
-    engagementRaw: p.engagementRate ?? null,
-  };
+// Card type exposed to the UI — profile + optional score
+export interface DiscoverCard {
+  username:      string;
+  fullName:      string;
+  followersCount: number;
+  postsCount:    number;
+  biography:     string;
+  profilePicUrl?: string;
+  city?:         string;
+  countryCode?:  string;
+  isScoring:     boolean;   // true = Gemini hasn't scored this card yet
+  // score fields (undefined while isScoring)
+  score?:        number;
+  label?:        string;
+  niche?:        string;
+  gender?:       string;
+  estimatedAge?: string;
+  inferredCity?: string;
+  engagementRate?: number;
 }
 
 export function useDiscovery() {
-  const [stage, setStage]           = useState<DiscoverStage>('idle');
-  const [profiled, setProfiled]     = useState<Influencer[]>([]);
-  const [aiVerified, setAiVerified] = useState<Influencer[]>([]);
-  const [allScored, setAllScored]   = useState<Influencer[]>([]);
-  const [stats, setStats]           = useState<DiscoverStats | null>(null);
-  const [error, setError]           = useState<Error | null>(null);
+  const [stage, setStage]       = useState<DiscoverStage>('idle');
+  const [profiles, setProfiles] = useState<InstagramProfile[]>([]);
+  const [scores, setScores]     = useState<Record<string, ScoreData>>({});
+  const [stats, setStats]       = useState<DiscoverStats | null>(null);
+  const [error, setError]       = useState<Error | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
-  // Restore last complete result from cache
+  // Restore last session from cache
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
-      const { profiled: p, aiVerified: av, allScored: as, stats: s } = JSON.parse(saved);
-      if (av?.length) {
-        if (p)  setProfiled(p);
-        if (av) setAiVerified(av);
-        if (as) setAllScored(as);
-        if (s)  setStats(s);
+      const parsed = JSON.parse(saved);
+      if (parsed.profiles?.length) {
+        setProfiles(parsed.profiles);
+        setScores(parsed.scores ?? {});
+        setStats(parsed.stats ?? null);
         setStage('done');
       }
     } catch { /* ignore */ }
   }, []);
 
+  // Merged cards: profile data + score data (if available)
+  const cards: DiscoverCard[] = useMemo(() =>
+    profiles.map((p) => {
+      const s = scores[p.username];
+      return {
+        username:       p.username,
+        fullName:       p.fullName,
+        followersCount: p.followersCount,
+        postsCount:     p.postsCount,
+        biography:      p.biography,
+        profilePicUrl:  p.profilePicUrl,
+        city:           p.city,
+        countryCode:    p.countryCode,
+        isScoring:      !s,
+        score:          s?.score,
+        label:          s?.label,
+        niche:          s?.niche,
+        gender:         s?.gender,
+        estimatedAge:   s?.estimatedAge,
+        inferredCity:   s?.inferredCity,
+        engagementRate: s?.engagementRate,
+      };
+    }),
+  [profiles, scores]);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setStage('idle');
-    setProfiled([]);
-    setAiVerified([]);
-    setAllScored([]);
+    setProfiles([]);
+    setScores({});
     setStats(null);
     setError(null);
   }, []);
 
   const runDiscover = useCallback(async ({
     seeds,
-    filters,
+    resultsType = 'posts',
   }: {
     seeds: string[];
-    filters?: DiscoverFilters;
+    resultsType?: 'posts' | 'reels';
   }) => {
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
     setStage('scanning');
-    setProfiled([]);
-    setAiVerified([]);
-    setAllScored([]);
+    setProfiles([]);
+    setScores({});
     setStats(null);
     setError(null);
 
@@ -133,7 +120,7 @@ export function useDiscovery() {
       const res = await fetch('/api/discover', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ seeds, filters }),
+        body:    JSON.stringify({ seeds, resultsType }),
         signal:  abortRef.current.signal,
       });
 
@@ -145,6 +132,7 @@ export function useDiscovery() {
       const reader  = res.body!.getReader();
       const decoder = new TextDecoder();
       let buffer    = '';
+      let lastProfiles: InstagramProfile[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -162,26 +150,29 @@ export function useDiscovery() {
             const event = JSON.parse(line.slice(6));
 
             if (event.type === 'profiled') {
-              const cards = (event.profiles as InstagramProfile[]).map(profileToInfluencer);
-              setProfiled(cards);
+              lastProfiles = event.profiles as InstagramProfile[];
+              setProfiles(lastProfiles);
               setStats(event.stats as DiscoverStats);
               setStage('scoring');
 
+            } else if (event.type === 'scored') {
+              const { username, ...scoreData } = event as { username: string } & ScoreData;
+              setScores((prev) => ({ ...prev, [username]: scoreData }));
+
             } else if (event.type === 'complete') {
-              const av  = (event.influencers   as ScoredRaw[]).map(scoredToInfluencer);
-              const as2 = (event.allScored ?? event.influencers as ScoredRaw[]).map(scoredToInfluencer);
-              setAiVerified(av);
-              setAllScored(as2);
               setStats(event.stats as DiscoverStats);
               setStage('done');
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                  profiled:   as2,
-                  aiVerified: av,
-                  allScored:  as2,
-                  stats:      event.stats,
-                }));
-              } catch { /* ignore */ }
+              // Save to cache after scoring completes
+              setScores((prev) => {
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    profiles: lastProfiles,
+                    scores:   prev,
+                    stats:    event.stats,
+                  }));
+                } catch { /* ignore */ }
+                return prev;
+              });
 
             } else if (event.type === 'error') {
               throw new Error(event.message as string);
@@ -198,18 +189,21 @@ export function useDiscovery() {
     }
   }, []);
 
+  const scoredCount   = Object.keys(scores).length;
+  const totalProfiles = profiles.length;
+
   return {
     runDiscover,
     reset,
     stage,
-    profiled,
-    aiVerified,
-    allScored,
+    cards,
     stats,
     error,
-    isScanning:  stage === 'scanning',
-    isScoring:   stage === 'scoring',
-    isDone:      stage === 'done',
-    isError:     stage === 'error',
+    scoredCount,
+    totalProfiles,
+    isScanning: stage === 'scanning',
+    isScoring:  stage === 'scoring',
+    isDone:     stage === 'done',
+    isError:    stage === 'error',
   };
 }

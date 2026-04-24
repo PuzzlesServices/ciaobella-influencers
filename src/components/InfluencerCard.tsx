@@ -38,7 +38,15 @@ function EngagementLabel({ rate }: { rate: number }) {
   );
 }
 
-const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Influencer; defaultSaved?: boolean }) => {
+const InfluencerCard = ({
+  influencer,
+  defaultSaved = false,
+  scoring = false,
+}: {
+  influencer: Influencer;
+  defaultSaved?: boolean;
+  scoring?: boolean;
+}) => {
   const [isSaved, setIsSaved] = useState(defaultSaved);
   const [realEngagement, setRealEngagement] = useState<string | null>(
     influencer.engagementRaw != null ? `${influencer.engagementRaw.toFixed(1)}%` : null
@@ -84,7 +92,9 @@ const InfluencerCard = ({ influencer, defaultSaved = false }: { influencer: Infl
   const hasCachedEngagement = influencer.engagementRaw != null;
 
   return (
-    <div className="group bg-card rounded-xl border border-border p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col">
+    <div className={`group bg-card rounded-xl border p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col ${
+      scoring ? 'border-primary/30 animate-pulse-border' : 'border-border'
+    }`}>
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-lg font-semibold text-muted-foreground shrink-0 overflow-hidden">
