@@ -36,6 +36,7 @@ const Index = () => {
   const [discoverFollMin, setDiscoverFollMin] = useState(30);   // en K
   const [discoverFollMax, setDiscoverFollMax] = useState(100);  // en K
   const [discoverCity, setDiscoverCity]       = useState('miami');
+  const [discoverMediaType, setDiscoverMediaType] = useState<'posts' | 'reels'>('posts');
 
   // TikTok → IG mode state
   const [tiktokInput, setTiktokInput]   = useState(DEFAULT_TIKTOK_HASHTAGS);
@@ -55,9 +56,17 @@ const Index = () => {
   } = useSearch();
 
   const {
-    mutate: runDiscover, data: discoverResult,
-    isPending: isDiscovering, isError: isDiscoverError, error: discoverError,
-    reset: resetDiscover,
+    runDiscover,
+    reset:      resetDiscover,
+    stage:      discoverStage,
+    profiled:   discoverProfiled,
+    aiVerified: discoverAiVerified,
+    allScored:  discoverAllScored,
+    stats:      discoverStats,
+    isScanning: isDiscovering,
+    isScoring:  isDiscoverScoring,
+    isError:    isDiscoverError,
+    error:      discoverError,
   } = useDiscovery();
 
   const {
@@ -75,6 +84,8 @@ const Index = () => {
   const { mutate: runAnalysis, data: analysisResult, isPending: isAnalyzing, reset: resetAnalysis } = useHashtagAnalysis();
 
   const isPending   = isSearching || isDiscovering || isTikToking || isTikTokingNative;
+  const isDiscoverBusy = isDiscovering || isDiscoverScoring;
+
   const isError     = searchMode === 'hashtag'       ? isSearchError
                     : searchMode === 'discovery'     ? isDiscoverError
                     : searchMode === 'tiktok'        ? isTikTokError
@@ -83,13 +94,38 @@ const Index = () => {
                     : searchMode === 'discovery'     ? discoverError
                     : searchMode === 'tiktok'        ? tiktokError
                     :                                  tiktokNativeError;
+
+  // Adapter so discovery mode stays compatible with the shared activeResult shape
+  const hasDiscoverData = discoverStage === 'scoring' || discoverStage === 'done';
+  const discoverResult = hasDiscoverData ? {
+    influencers: discoverAiVerified,
+    allProfiled: discoverAllScored.length > 0 ? discoverAllScored : discoverProfiled,
+    stats: {
+      hashtagPostsFound:  discoverStats?.hashtagPostsFound  ?? 0,
+      afterPreFilter:     discoverStats?.afterPreFilter     ?? 0,
+      afterProfileFilter: discoverStats?.afterProfileFilter ?? 0,
+      afterPresetFilter:  discoverStats?.afterPresetFilter  ?? 0,
+      final:              discoverStats?.final              ?? 0,
+    },
+  } : null;
+
   const activeResult = searchMode === 'hashtag'      ? searchResult
                      : searchMode === 'discovery'    ? discoverResult
                      : searchMode === 'tiktok'       ? tiktokResult
                      :                                 tiktokNativeResult;
-  const allInfluencers: Influencer[] = showAll
-    ? (activeResult?.allProfiled ?? [])
-    : (activeResult?.influencers ?? []);
+
+  // Discovery: during scoring show profiled cards; after done use selected tab
+  const discoverDisplayed = isDiscoverScoring
+    ? discoverProfiled
+    : showAll
+      ? (discoverResult?.allProfiled ?? [])
+      : (discoverResult?.influencers ?? []);
+
+  const allInfluencers: Influencer[] = searchMode === 'discovery'
+    ? discoverDisplayed
+    : showAll
+      ? (activeResult?.allProfiled ?? [])
+      : (activeResult?.influencers ?? []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -122,6 +158,7 @@ const Index = () => {
         followersMin: discoverFollMin * 1_000,
         followersMax: discoverFollMax * 1_000,
         city:         discoverCity,
+        resultsType:  discoverMediaType,
       },
     });
   };
@@ -197,9 +234,11 @@ const Index = () => {
 
   const statusText = isPending
     ? searchMode === 'hashtag'        ? "Searching Instagram…"
-    : searchMode === 'discovery'      ? "Scanning Miami locations…"
+    : searchMode === 'discovery'      ? "Scraping Miami locations…"
     : searchMode === 'tiktok'         ? "Searching TikTok → cross-referencing Instagram…"
     :                                   "Scraping TikTok videos and scoring creators…"
+    : searchMode === 'discovery' && isDiscoverScoring
+    ? `${discoverProfiled.length} profiles found — AI scoring in progress…`
     : !activeResult
     ? searchMode === 'hashtag'        ? "Enter hashtags to search for influencers"
     : searchMode === 'discovery'      ? "Click Discover to scan Miami locations for influencers"
@@ -432,7 +471,7 @@ const Index = () => {
                     <button
                       key={g}
                       onClick={() => setDiscoverGender(g)}
-                      disabled={isPending}
+                      disabled={isDiscoverBusy}
                       className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 ${
                         discoverGender === g
                           ? 'bg-primary text-primary-foreground shadow-sm'
@@ -451,7 +490,7 @@ const Index = () => {
                     type="number"
                     value={discoverAgeMin}
                     onChange={(e) => setDiscoverAgeMin(Number(e.target.value))}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     min={18} max={99}
                     className="w-12 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
                   />
@@ -460,7 +499,7 @@ const Index = () => {
                     type="number"
                     value={discoverAgeMax}
                     onChange={(e) => setDiscoverAgeMax(Number(e.target.value))}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     min={18} max={99}
                     className="w-12 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
                   />
@@ -473,7 +512,7 @@ const Index = () => {
                     type="number"
                     value={discoverFollMin}
                     onChange={(e) => setDiscoverFollMin(Number(e.target.value))}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     min={1}
                     className="w-14 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
                   />
@@ -482,7 +521,7 @@ const Index = () => {
                     type="number"
                     value={discoverFollMax}
                     onChange={(e) => setDiscoverFollMax(Number(e.target.value))}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     min={1}
                     className="w-14 px-1.5 py-1 rounded border border-input bg-background text-center text-xs text-foreground disabled:opacity-50"
                   />
@@ -496,10 +535,28 @@ const Index = () => {
                     type="text"
                     value={discoverCity}
                     onChange={(e) => setDiscoverCity(e.target.value)}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     placeholder="city"
                     className="w-20 px-1.5 py-1 rounded border border-input bg-background text-xs text-foreground placeholder:text-muted-foreground disabled:opacity-50"
                   />
+                </div>
+
+                {/* Posts / Reels toggle */}
+                <div className="flex items-center rounded-md border border-input bg-background p-0.5 gap-0.5">
+                  {(['posts', 'reels'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setDiscoverMediaType(t)}
+                      disabled={isDiscoverBusy}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 capitalize ${
+                        discoverMediaType === t
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="w-px h-4 bg-border shrink-0" />
@@ -509,21 +566,23 @@ const Index = () => {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
                   <input
                     type="text"
-                    placeholder="Seed accounts (optional): miamiinfluencer1, username2..."
+                    placeholder="Seed accounts (optional): handle1, handle2…"
                     value={seedInput}
                     onChange={(e) => setSeedInput(e.target.value)}
-                    disabled={isPending}
+                    disabled={isDiscoverBusy}
                     className="w-full pl-7 pr-4 py-2.5 rounded-lg border border-input bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-shadow disabled:opacity-50"
                   />
                 </div>
 
                 <Button
                   onClick={handleDiscover}
-                  disabled={isPending}
+                  disabled={isDiscoverBusy}
                   className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   {isDiscovering ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning…</>
+                  ) : isDiscoverScoring ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scoring…</>
                   ) : (
                     <><MapPin className="w-4 h-4 mr-2" /> Discover</>
                   )}
@@ -541,40 +600,83 @@ const Index = () => {
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">{statusText}</p>
               </div>
-              {activeResult && (
+              {(activeResult || isDiscoverScoring) && (
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowAll(false)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      !showAll
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    AI Verified ({activeResult.influencers.length})
-                  </button>
-                  <button
-                    onClick={() => setShowAll(true)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      showAll
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    All 30K+ ({activeResult.allProfiled.length})
-                  </button>
+                  {searchMode === 'discovery' ? (
+                    <>
+                      <button
+                        onClick={() => setShowAll(false)}
+                        disabled={isDiscoverScoring}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-40 ${
+                          !showAll && !isDiscoverScoring
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        {isDiscoverScoring
+                          ? 'AI Verified…'
+                          : `AI Verified (${discoverAiVerified.length})`}
+                      </button>
+                      <button
+                        onClick={() => setShowAll(true)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          showAll || isDiscoverScoring
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        All Profiled ({isDiscoverScoring ? discoverProfiled.length : (discoverResult?.allProfiled.length ?? 0)})
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setShowAll(false)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          !showAll ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        AI Verified ({activeResult?.influencers.length ?? 0})
+                      </button>
+                      <button
+                        onClick={() => setShowAll(true)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          showAll ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        All 30K+ ({activeResult?.allProfiled.length ?? 0})
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
 
-            {activeResult && (
+            {(activeResult || isDiscoverScoring) && (
               <div className="text-xs text-muted-foreground leading-relaxed mb-4">
-                <span className="font-medium">{activeResult.stats.hashtagPostsFound}</span>{' '}
+                <span className="font-medium">{discoverStats?.hashtagPostsFound ?? activeResult?.stats.hashtagPostsFound}</span>{' '}
                 {searchMode === 'hashtag' ? 'posts scraped' : searchMode === 'discovery' ? 'location posts' : searchMode === 'tiktok' ? 'TikTok authors' : 'TikTok videos'}
-                {" → "}<span className="font-medium">{activeResult.stats.afterPreFilter}</span> pre-filtered
-                {" → "}<span className="font-medium">{activeResult.stats.afterProfileFilter}</span> profiled
-                {" → "}<span className="font-medium">{activeResult.stats.afterPresetFilter}</span> AI-verified
-                {" → "}<span className="font-medium text-foreground">{activeResult.stats.final}</span> ranked
+                {" → "}<span className="font-medium">{discoverStats?.afterPreFilter ?? activeResult?.stats.afterPreFilter}</span> pre-filtered
+                {" → "}<span className="font-medium">{discoverStats?.afterProfileFilter ?? activeResult?.stats.afterProfileFilter}</span> profiled
+                {isDiscoverScoring ? (
+                  <> → <Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /> scoring…</>
+                ) : (
+                  <>
+                    {" → "}<span className="font-medium">{activeResult?.stats.afterPresetFilter}</span> AI-verified
+                    {" → "}<span className="font-medium text-foreground">{activeResult?.stats.final}</span> ranked
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Scoring progress banner */}
+            {searchMode === 'discovery' && isDiscoverScoring && (
+              <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm mb-5">
+                <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
+                <span className="text-primary">
+                  <span className="font-medium">Gemini está analizando {discoverProfiled.length} perfiles</span>
+                  {" "}— los resultados AI Verified aparecerán automáticamente al terminar.
+                </span>
               </div>
             )}
 
@@ -609,14 +711,14 @@ const Index = () => {
               </div>
             )}
 
-            {searchMode === 'discovery' && !isPending && !activeResult && (
+            {searchMode === 'discovery' && discoverStage === 'idle' && (
               <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
                 <p className="font-medium text-foreground mb-2">Cómo funciona Miami Discovery</p>
                 <ul className="space-y-1 list-disc list-inside">
-                  <li>Escanea posts geotaggeados en Miami, Wynwood, Brickell, Coral Gables y Miami Beach</li>
-                  <li>Filtra automáticamente por mujeres · 25–60 años · 30K–100K seguidores</li>
-                  <li>Optionally add known Miami influencer handles as seeds to boost discovery</li>
-                  <li>La IA de Gemini verifica y puntúa cada perfil antes de mostrarlo</li>
+                  <li>Escanea {discoverMediaType} con hashtags de Miami (miamigirl, wynwoodmiami, southbeachmiami…)</li>
+                  <li>Usa los filtros de arriba para ajustar género, edad, seguidores y ciudad</li>
+                  <li>Los perfiles aparecen en cuanto Apify termina — mientras Gemini los verifica en paralelo</li>
+                  <li>Cambia entre <strong>All Profiled</strong> y <strong>AI Verified</strong> cuando el análisis finalice</li>
                 </ul>
               </div>
             )}
@@ -628,6 +730,7 @@ const Index = () => {
               </div>
             )}
 
+            {/* Skeleton: solo durante el scanning inicial (Apify), no durante scoring */}
             {isPending && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -641,7 +744,7 @@ const Index = () => {
                 {displayed.map((influencer) => (
                   <InfluencerCard key={influencer.username} influencer={influencer} />
                 ))}
-                {activeResult && displayed.length === 0 && (
+                {(activeResult || isDiscoverScoring) && displayed.length === 0 && !isDiscoverScoring && (
                   <p className="col-span-full text-center text-muted-foreground py-16 text-sm">
                     No influencers matched the current filters.
                   </p>

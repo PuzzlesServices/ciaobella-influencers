@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { scrapeByMiamiLocations, scrapeProfiles } from '@/server/services/apify';
 import { preFilter } from '@/server/filters/preFilter';
 import { postProfileFilter } from '@/server/filters/postFilter';
@@ -38,122 +38,157 @@ function buildPassesFilter(genderAllowed: string[], ageAllowed: string[], target
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const { seeds = [], filters }: DiscoverRequest = await req.json();
+  const { seeds = [], filters }: DiscoverRequest = await req.json();
 
-    const followersMin  = filters?.followersMin ?? 30_000;
-    const followersMax  = filters?.followersMax ?? 100_000;
-    const targetCity    = (filters?.city ?? 'miami').toLowerCase().trim();
-    const genderAllowed = resolveGenderAllowed(filters?.gender);
-    const ageAllowed    = resolveAgeBuckets(filters?.ageMin, filters?.ageMax);
-    const passesFilter  = buildPassesFilter(genderAllowed, ageAllowed, targetCity);
+  const followersMin  = filters?.followersMin ?? 30_000;
+  const followersMax  = filters?.followersMax ?? 100_000;
+  const targetCity    = (filters?.city ?? 'miami').toLowerCase().trim();
+  const genderAllowed = resolveGenderAllowed(filters?.gender);
+  const ageAllowed    = resolveAgeBuckets(filters?.ageMin, filters?.ageMax);
+  const passesFilter  = buildPassesFilter(genderAllowed, ageAllowed, targetCity);
+  const resultsType   = filters?.resultsType ?? 'posts';
 
-    const cleanedSeeds = seeds
-      .map((s) => s.replace(/^@/, '').trim())
-      .filter(Boolean);
+  const cleanedSeeds = seeds.map((s) => s.replace(/^@/, '').trim()).filter(Boolean);
 
-    // ── PASO 2: Scrape location posts ───────────────────────────────────────
-    console.log(`\n[discover] ── PASO 2: location scraper (${LOCATION_POSTS_LIMIT} posts, city: ${targetCity})`);
-    const posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT);
+  const encoder = new TextEncoder();
 
-    // ── PASO 3: Pre-filtro → candidateUsernames ────────────────────────────
-    console.log(`[discover] ── PASO 3: Pre-filtro`);
-    const fromLocations = preFilter(posts);
-    console.log(`[discover] Pre-filtro: ${posts.length} posts → ${fromLocations.length} candidatos`);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // client disconnected
+        }
+      };
 
-    // ── Merge seeds (bypass geotag, enter pipeline directly) ────────────────
-    const allCandidates = Array.from(new Set([...fromLocations, ...cleanedSeeds]));
-    if (cleanedSeeds.length > 0) {
-      console.log(`[discover] Seeds añadidos: ${cleanedSeeds.join(', ')} → total candidatos: ${allCandidates.length}`);
-    }
+      try {
+        // ── PASO 1: Scrape Miami location posts ────────────────────────────
+        console.log(`\n[discover] ── PASO 1: location scraper (${LOCATION_POSTS_LIMIT} ${resultsType})`);
+        const posts = await scrapeByMiamiLocations(LOCATION_POSTS_LIMIT, resultsType);
 
-    if (allCandidates.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
-      });
-    }
+        // ── PASO 2: Pre-filtro ─────────────────────────────────────────────
+        console.log(`[discover] ── PASO 2: Pre-filtro`);
+        const fromLocations = preFilter(posts);
+        console.log(`[discover] Pre-filtro: ${posts.length} posts → ${fromLocations.length} candidatos`);
 
-    // ── PASO 4: Apify Profile Scraper ──────────────────────────────────────
-    console.log(`[discover] ── PASO 4: Profile scraper (${allCandidates.length} perfiles)`);
-    const profiles = await scrapeProfiles(allCandidates);
+        const allCandidates = Array.from(new Set([...fromLocations, ...cleanedSeeds]));
+        if (cleanedSeeds.length > 0) {
+          console.log(`[discover] Seeds añadidos: ${cleanedSeeds.join(', ')} → total: ${allCandidates.length}`);
+        }
 
-    // ── PASO 5a: Filtro post-perfil (followers range) ─────────────────────
-    console.log(`[discover] ── PASO 5a: Post-profile filter (${followersMin/1000}K–${followersMax/1000}K)`);
-    const filteredProfiles = postProfileFilter(profiles, followersMin, followersMax);
-    console.log(`[discover] Post-filtro: ${profiles.length} → ${filteredProfiles.length} perfiles`);
+        if (allCandidates.length === 0) {
+          send({
+            type: 'complete',
+            influencers: [],
+            allScored: [],
+            stats: { hashtagPostsFound: posts.length, afterPreFilter: 0, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
+          });
+          controller.close();
+          return;
+        }
 
-    if (filteredProfiles.length === 0) {
-      return NextResponse.json({
-        influencers: [],
-        stats: {
-          hashtagPostsFound:  posts.length,
-          afterPreFilter:     allCandidates.length,
-          afterProfileFilter: 0,
-          afterPresetFilter:  0,
-          final:              0,
-        },
-      });
-    }
+        // ── PASO 3: Apify Profile Scraper ──────────────────────────────────
+        console.log(`[discover] ── PASO 3: Profile scraper (${allCandidates.length} candidatos)`);
+        const profiles = await scrapeProfiles(allCandidates);
 
-    // ── PASO 5b: Gemini scoring + clasificación ────────────────────────────
-    console.log(`[discover] ── PASO 5b: Scoring ${filteredProfiles.length} perfiles con Gemini`);
+        // ── PASO 4: Post-profile filter ────────────────────────────────────
+        console.log(`[discover] ── PASO 4: Post-profile filter (${followersMin / 1000}K–${followersMax / 1000}K)`);
+        const filteredProfiles = postProfileFilter(profiles, followersMin, followersMax);
+        console.log(`[discover] Post-filtro: ${profiles.length} → ${filteredProfiles.length} perfiles`);
 
-    const scored: ScoredInfluencer[] = [];
-    for (const profile of filteredProfiles) {
-      const postData = posts.find(
-        (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
-      );
-      const engagementRate =
-        profile.followersCount > 0 && postData
-          ? ((postData.likesCount + postData.commentsCount) / profile.followersCount) * 100
-          : 0;
+        // ── Enviar perfiles al cliente de inmediato ────────────────────────
+        send({
+          type: 'profiled',
+          profiles: filteredProfiles,
+          stats: {
+            hashtagPostsFound:  posts.length,
+            afterPreFilter:     allCandidates.length,
+            afterProfileFilter: filteredProfiles.length,
+          },
+        });
 
-      const result = await scoreInfluencer(profile, engagementRate);
-      scored.push({ ...profile, ...result, engagementRate });
-      console.log(
-        `[discover] Scored @${profile.username} → ${result.score} (${result.label}) | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
-      );
+        if (filteredProfiles.length === 0) {
+          send({
+            type: 'complete',
+            influencers: [],
+            allScored: [],
+            stats: { hashtagPostsFound: posts.length, afterPreFilter: allCandidates.length, afterProfileFilter: 0, afterPresetFilter: 0, final: 0 },
+          });
+          controller.close();
+          return;
+        }
 
-      cacheInfluencer({
-        username:        profile.username,
-        full_name:       profile.fullName,
-        profile_pic:     profile.profilePicUrl,
-        bio:             profile.biography,
-        followers_count: profile.followersCount,
-        engagement_rate: engagementRate,
-        match_score:     result.score,
-        ai_category:     result.niche,
-        ai_reason:       result.reason,
-      }).catch((err) => console.error(`[discover] cacheInfluencer failed for @${profile.username}:`, err));
+        // ── PASO 5: Gemini scoring ─────────────────────────────────────────
+        console.log(`[discover] ── PASO 5: Scoring ${filteredProfiles.length} perfiles con Gemini`);
 
-      await new Promise((r) => setTimeout(r, 4_000));
-    }
+        const scored: ScoredInfluencer[] = [];
+        for (const profile of filteredProfiles) {
+          const postData = posts.find(
+            (p) => p.ownerUsername.toLowerCase() === profile.username.toLowerCase()
+          );
+          const engagementRate =
+            profile.followersCount > 0 && postData
+              ? ((postData.likesCount + postData.commentsCount) / profile.followersCount) * 100
+              : 0;
 
-    // ── PASO 6: Filter ─────────────────────────────────────────────────────
-    const allScored      = [...scored].sort((a, b) => b.score - a.score);
-    const presetFiltered = scored.filter(passesFilter);
-    console.log(
-      `[discover] Filter: ${scored.length} → ${presetFiltered.length} (gender:${genderAllowed.join('/')} · age:${ageAllowed.filter(a=>a!=='unknown').join('/')} · ${targetCity})`
-    );
+          const result = await scoreInfluencer(profile, engagementRate);
+          scored.push({ ...profile, ...result, engagementRate });
+          console.log(
+            `[discover] Scored @${profile.username} → ${result.score} (${result.label}) | gender:${result.gender} age:${result.estimatedAge} city:${result.inferredCity}`
+          );
 
-    // ── PASO 7: Sort by score ──────────────────────────────────────────────
-    const sorted = presetFiltered.sort((a, b) => b.score - a.score);
-    console.log(`[discover] ✓ Done — ${sorted.length} influencers ranked`);
+          cacheInfluencer({
+            username:        profile.username,
+            full_name:       profile.fullName,
+            profile_pic:     profile.profilePicUrl,
+            bio:             profile.biography,
+            followers_count: profile.followersCount,
+            engagement_rate: engagementRate,
+            match_score:     result.score,
+            ai_category:     result.niche,
+            ai_reason:       result.reason,
+          }).catch((err) => console.error(`[discover] cacheInfluencer failed for @${profile.username}:`, err));
 
-    return NextResponse.json({
-      influencers: sorted,
-      allScored,
-      stats: {
-        hashtagPostsFound:  posts.length,
-        afterPreFilter:     allCandidates.length,
-        afterProfileFilter: filteredProfiles.length,
-        afterPresetFilter:  presetFiltered.length,
-        final:              sorted.length,
-      },
-    });
-  } catch (err) {
-    console.error('[discover] Error:', err);
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
-  }
+          await new Promise((r) => setTimeout(r, 4_000));
+        }
+
+        // ── PASO 6: Filter + sort ──────────────────────────────────────────
+        const allScored      = [...scored].sort((a, b) => b.score - a.score);
+        const presetFiltered = scored.filter(passesFilter).sort((a, b) => b.score - a.score);
+        console.log(
+          `[discover] Filter: ${scored.length} → ${presetFiltered.length} (gender:${genderAllowed.join('/')} · city:${targetCity})`
+        );
+        console.log(`[discover] ✓ Done — ${presetFiltered.length} influencers ranked`);
+
+        send({
+          type: 'complete',
+          influencers: presetFiltered,
+          allScored,
+          stats: {
+            hashtagPostsFound:  posts.length,
+            afterPreFilter:     allCandidates.length,
+            afterProfileFilter: filteredProfiles.length,
+            afterPresetFilter:  presetFiltered.length,
+            final:              presetFiltered.length,
+          },
+        });
+
+        controller.close();
+      } catch (err) {
+        console.error('[discover] Error:', err);
+        send({ type: 'error', message: (err as Error).message });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type':    'text/event-stream',
+      'Cache-Control':   'no-cache, no-transform',
+      'Connection':      'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

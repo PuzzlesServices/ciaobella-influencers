@@ -94,16 +94,17 @@ const MIAMI_DISCOVERY_HASHTAGS = [
   'miamibeach',
 ];
 
-export async function scrapeByMiamiLocations(limit: number): Promise<HashtagPost[]> {
+export async function scrapeByMiamiLocations(limit: number, resultsType: 'posts' | 'reels' = 'posts'): Promise<HashtagPost[]> {
   const perHashtag = Math.ceil(limit / MIAMI_DISCOVERY_HASHTAGS.length);
 
   console.log(
-    `[apify] Miami Discovery — ${MIAMI_DISCOVERY_HASHTAGS.length} location hashtags, ~${perHashtag} posts each`
+    `[apify] Miami Discovery — ${MIAMI_DISCOVERY_HASHTAGS.length} hashtags, ~${perHashtag} ${resultsType} each`
   );
 
   const datasetId = await startAndWait('apify~instagram-hashtag-scraper', {
     hashtags:     MIAMI_DISCOVERY_HASHTAGS,
     resultsLimit: perHashtag,
+    resultsType,
   });
 
   const posts = await fetchDataset<HashtagPost>(datasetId);

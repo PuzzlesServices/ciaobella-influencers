@@ -51,11 +51,12 @@ export interface SearchRequest {
 
 export interface DiscoverFilters {
   gender?: 'female' | 'male' | 'any';
-  ageMin?: number;         // e.g. 25
-  ageMax?: number;         // e.g. 60
-  followersMin?: number;   // actual count, e.g. 30000
-  followersMax?: number;   // actual count, e.g. 100000
+  ageMin?: number;
+  ageMax?: number;
+  followersMin?: number;
+  followersMax?: number;
   city?: string;
+  resultsType?: 'posts' | 'reels';
 }
 
 export interface DiscoverRequest {
