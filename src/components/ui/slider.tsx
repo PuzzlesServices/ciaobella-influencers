@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
-(({ className, ...props }, ref) => {
+>(({ className, ...props }, ref) => {
   const thumbCount = props.value?.length ?? props.defaultValue?.length ?? 1;
   return (
     <SliderPrimitive.Root
