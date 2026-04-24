@@ -256,7 +256,7 @@ const Index = () => {
           ? discoverActiveMode === 'username'
             ? discoverStats?.relatedHashtags
               ? `Scraping hashtags: ${discoverStats.relatedHashtags.map(t => `#${t}`).join(', ')}…`
-              : `Analizando posts del seed…`
+              : `Analyzing seed account posts…`
             : "Scraping Miami locations…"
           : isDiscoverScoring     ? `${discoverScoredCount} / ${discoverTotal} scored by Gemini…`
           : hasDiscoverData       ? `${filteredDiscoverCards.length} of ${discoverTotal} profiles match filters`
@@ -658,7 +658,7 @@ const Index = () => {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <span className="font-semibold leading-none">@</span> Similares
+                  <span className="font-semibold leading-none">@</span> Similar
                 </button>
               </div>
 
@@ -669,7 +669,7 @@ const Index = () => {
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <input
                       type="text"
-                      placeholder="Vacío = Miami defaults, o custom: miamilux, miamifashion…"
+                      placeholder="Empty = Miami defaults, or custom: miamilux, miamifashion…"
                       value={discoverSearchInput}
                       onChange={(e) => setDiscoverSearchInput(e.target.value)}
                       disabled={isDiscoverBusy}
@@ -681,7 +681,7 @@ const Index = () => {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">@</span>
                     <input
                       type="text"
-                      placeholder="handle de referencia, ej: nicolehibbard1970"
+                      placeholder="seed account handle, e.g. nicolehibbard1970"
                       value={discoverSearchInput}
                       onChange={(e) => setDiscoverSearchInput(e.target.value)}
                       disabled={isDiscoverBusy}
@@ -772,12 +772,12 @@ const Index = () => {
             <div className="text-xs text-muted-foreground leading-relaxed mb-4">
               {discoverActiveMode === 'username' ? (
                 <>
-                  <span className="font-medium">{discoverStats.seedPostsAnalyzed ?? '—'}</span> posts del seed
+                  <span className="font-medium">{discoverStats.seedPostsAnalyzed ?? '—'}</span> seed posts
                   {discoverStats.relatedHashtags?.length ? (
                     <>{" → "}{discoverStats.relatedHashtags.map(t => `#${t}`).join(', ')}</>
                   ) : null}
-                  {" → "}<span className="font-medium">{discoverStats.hashtagPostsFound}</span> posts scrapeados
-                  {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> candidatos
+                  {" → "}<span className="font-medium">{discoverStats.hashtagPostsFound}</span> posts scraped
+                  {" → "}<span className="font-medium">{discoverStats.afterPreFilter}</span> candidates
                   {" → "}<span className="font-medium">{discoverStats.afterQualityFilter}</span> profiled
                 </>
               ) : (
@@ -790,7 +790,7 @@ const Index = () => {
               {" → "}
               {isDiscoverScoring
                 ? <><Loader2 className="w-3 h-3 inline animate-spin mx-0.5" /><span className="font-medium">{discoverScoredCount}</span>/{discoverTotal} scoring…</>
-                : <><span className="font-medium text-foreground">{discoverScoredCount}</span> scored · <span className="font-medium text-foreground">{filteredDiscoverCards.length}</span> visible con filtros actuales</>
+                : <><span className="font-medium text-foreground">{discoverScoredCount}</span> scored · <span className="font-medium text-foreground">{filteredDiscoverCards.length}</span> visible with current filters</>
               }
             </div>
           )}
@@ -839,8 +839,8 @@ const Index = () => {
             <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm mb-5">
               <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
               <span className="text-primary">
-                <span className="font-medium">Gemini analizando {discoverTotal} perfiles</span>
-                {" — "}{discoverScoredCount} listos, {discoverTotal - discoverScoredCount} en cola. Los filtros ya funcionan en tiempo real.
+                <span className="font-medium">Gemini scoring {discoverTotal} profiles</span>
+                {" — "}{discoverScoredCount} done, {discoverTotal - discoverScoredCount} in queue. Filters work in real time.
               </span>
             </div>
           )}
@@ -912,23 +912,23 @@ const Index = () => {
             <div className="rounded-xl border border-border bg-muted/30 p-6 mb-5 text-sm text-muted-foreground">
               {discoverMode === 'hashtag' ? (
                 <>
-                  <p className="font-medium text-foreground mb-2">Modo # Hashtags — Miami Discovery</p>
+                  <p className="font-medium text-foreground mb-2">Mode # Hashtags — Miami Discovery</p>
                   <ul className="space-y-1 list-disc list-inside">
-                    <li>Dejá el input vacío para usar los hashtags Miami por defecto (miamigirl, wynwoodmiami, southbeachmiami…)</li>
-                    <li>O ingresá hashtags propios separados por coma para buscar en otro nicho</li>
-                    <li>Los perfiles aparecen en cuanto Apify termina — Gemini los verifica en paralelo</li>
-                    <li>El género, edad, ciudad y seguidores filtran en tiempo real sin re-buscar</li>
+                    <li>Leave the input empty to use Miami default hashtags (miamigirl, wynwoodmiami, southbeachmiami…)</li>
+                    <li>Or enter your own hashtags separated by commas to search a different niche</li>
+                    <li>Profiles appear as soon as Apify finishes — Gemini verifies them in parallel</li>
+                    <li>Gender, age, city and followers filter in real time without re-fetching</li>
                   </ul>
                 </>
               ) : (
                 <>
-                  <p className="font-medium text-foreground mb-2">Modo @ Similares — Miami Discovery</p>
+                  <p className="font-medium text-foreground mb-2">Mode @ Similar — Miami Discovery</p>
                   <ul className="space-y-1 list-disc list-inside">
-                    <li>Ingresá el username de una influencer como referencia (una sola cuenta)</li>
-                    <li>Analizamos sus últimos <strong>6 posts</strong> y extraemos los <strong>4 hashtags</strong> más usados</li>
-                    <li>Buscamos cuentas que usen esos mismos hashtags (<strong>10 posts por hashtag</strong>, ~40 total)</li>
-                    <li>Se perfilarán hasta <strong>20 cuentas</strong> similares — límite para no consumir créditos de Apify</li>
-                    <li>Gemini score, género, edad y ciudad igual que en modo hashtag</li>
+                    <li>Enter one influencer's username as a reference account</li>
+                    <li>We analyze their last <strong>6 posts</strong> and extract the <strong>top 4 hashtags</strong> they use</li>
+                    <li>We find accounts using those same hashtags (<strong>10 posts per hashtag</strong>, ~40 total)</li>
+                    <li>Up to <strong>20 similar profiles</strong> will be scraped — limit to control Apify credit usage</li>
+                    <li>Gemini score, gender, age and city work the same as in hashtag mode</li>
                   </ul>
                 </>
               )}
