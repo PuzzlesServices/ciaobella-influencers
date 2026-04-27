@@ -1,5 +1,5 @@
 -- ============================================================
--- Crown Search — Monisha Melwani Fine Jewelry
+-- Ciao Bella — Salon, Day Spa & Wellness Center
 -- Influencer Discovery Database
 -- ============================================================
 
