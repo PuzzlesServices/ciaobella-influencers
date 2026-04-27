@@ -42,8 +42,8 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <Image
-            src="/logo-monisha.webp"
-            alt="Monisha Melwani"
+            src="/logo-ciaobella.png"
+            alt="Ciao Bella"
             width={140}
             height={56}
             className="object-contain"

@@ -1,10 +1,15 @@
 import { InstagramProfile } from '../types';
 
 const BUSINESS_BIO_KEYWORDS = [
-  // tiendas
-  'shop', 'store', 'boutique', 'jewelry', 'jewels', 'order now',
-  'dm to buy', 'dm for price', 'shipping', 'cod', 'wholesale',
-  'tienda', 'joyeria', 'joyería',
+  // tiendas / e-commerce
+  'shop', 'store', 'boutique', 'order now', 'dm to buy',
+  'dm for price', 'shipping', 'cod', 'wholesale', 'tienda',
+  // spas / salones / wellness centers (negocios)
+  'book your appointment', 'book online', 'book now', 'appointments available',
+  'call to book', 'online booking', 'gift certificates available',
+  'day spa', 'med spa', 'medspa', 'medi-spa', 'nail salon',
+  'beauty salon', 'hair salon', 'blow dry bar', 'aesthetics clinic',
+  'skin clinic', 'laser clinic', 'wellness center', 'beauty center',
   // restaurantes / venues
   'restaurant', 'bar', 'grill', 'kitchen', 'café', 'cafe', 'bistro',
   'eatery', 'diner', 'lounge', 'nightclub', 'club', 'venue', 'rooftop',

@@ -1,13 +1,15 @@
 import { HashtagPost } from '../types';
 
 const FULL_NAME_BLOCKLIST = [
-  'shop', 'store', 'boutique', 'jewelry', 'jewels', 'jewellery',
-  'diamonds', 'diamond', 'gems', 'gold', 'silver', 'studio',
-  'official', 'llc', 'ltd', 's.a.', 'inc', 'co.', 'couture',
-  'collection', 'collections', 'brand', 'brands', 'fashion house',
-  'atelier', 'maison', 'jeweler', 'jeweller', 'goldsmith',
-  'accessories', 'accessori', 'bijoux', 'bijouterie',
-  'tienda', 'negocio', 'empresa', 'joyeria', 'joyería',
+  'shop', 'store', 'boutique', 'studio',
+  'official', 'llc', 'ltd', 's.a.', 'inc', 'co.',
+  'collection', 'collections', 'brand', 'brands',
+  'accessories', 'tienda', 'negocio', 'empresa',
+  // Spas / salones / wellness centers (negocios, no influencers personales)
+  'salon', 'day spa', 'med spa', 'medspa', 'wellness center',
+  'beauty center', 'beauty bar', 'nail salon', 'blow dry bar',
+  'spa & salon', 'salon & spa', 'aesthetics', 'esthetics clinic',
+  'medi spa', 'skin clinic', 'laser clinic', 'beauty clinic',
   // Restaurantes / venues
   'restaurant', 'grill', 'kitchen', 'bistro', 'eatery', 'diner',
   'lounge', 'nightclub', 'rooftop', 'steakhouse', 'pizzeria',
@@ -19,9 +21,13 @@ const FULL_NAME_BLOCKLIST = [
 ];
 
 const USERNAME_BLOCKLIST = [
-  'shop', 'store', 'jewel', 'jewelry', 'jewellery', 'diamond',
-  'gems', 'boutique', 'official', 'brand', 'studio',
+  'shop', 'store', 'boutique', 'official', 'brand', 'studio',
   'design', 'designs', 'collection',
+  // Spas / salones / wellness centers
+  'salon', 'medspa', 'med_spa', 'dayspa', 'day_spa',
+  'beautycenter', 'beauty_center', 'beautybar', 'beauty_bar',
+  'nailsalon', 'nail_salon', 'skincare_clinic', 'laser_clinic',
+  'aesthetics', 'blowdrybar', 'blow_dry',
   // Restaurantes / venues
   'restaurant', 'grill', 'kitchen', 'lounge', 'nightclub', 'rooftop',
   'steakhouse', 'bistro', 'eatery', 'diner', 'bakery',

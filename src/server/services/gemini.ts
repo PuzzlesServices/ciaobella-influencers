@@ -26,67 +26,70 @@ export async function scoreInfluencer(
   profile: InstagramProfile,
   engagementRate: number
 ): Promise<ScoreResult> {
-  const prompt = `Sos un experto en influencer marketing para marcas de fine jewelry.
-Analizá este perfil de Instagram y calculá un match score del 0 al 100
-para la marca Monisha Melwani Fine Jewelry.
+  const prompt = `You are an influencer marketing expert for a wellness, beauty, and spa brand.
+Analyze this Instagram profile and calculate a match score from 0 to 100
+for Ciao Bella Salon, Day Spa & Wellness Center.
 
-PERFIL:
+PROFILE:
 Username: ${profile.username}
-Nombre: ${profile.fullName}
+Full Name: ${profile.fullName}
 Bio: ${profile.biography}
-Seguidores: ${profile.followersCount}
+Followers: ${profile.followersCount}
 Posts: ${profile.postsCount}
-Verificado: ${profile.isVerified}
-URL externa: ${profile.externalUrl ?? 'ninguna'}
-Engagement estimado: ${engagementRate.toFixed(2)}%
-Ciudad (Apify): ${profile.city ?? 'no disponible'}
-País (Apify): ${profile.countryCode ?? 'no disponible'}
+Verified: ${profile.isVerified}
+External URL: ${profile.externalUrl ?? 'none'}
+Estimated Engagement: ${engagementRate.toFixed(2)}%
+City (Apify): ${profile.city ?? 'not available'}
+Country (Apify): ${profile.countryCode ?? 'not available'}
 
-SOBRE MONISHA MELWANI:
-- Fine jewelry con diamantes naturales y lab-grown
-- Everyday luxury, piezas para usar y layerar
-- Showroom en Miami, FL
-- Audiencia objetivo: mujeres entre 25-60 años, poder adquisitivo medio-alto, USA
-- Busca influencers auténticos de Miami o zona sur de Florida
+ABOUT CIAO BELLA:
+- Voted #1 Salon, Day Spa & Wellness Center in Islamorada, Florida Keys
+- 20+ years delivering premium beauty and holistic self-care
+- Services: therapeutic massage, anti-aging skincare, infrared yoga, sound therapy,
+  salt infrared sauna, red light therapy, compression therapy, hair care,
+  nail services, organic spray tanning, clean waxing, day retreats
+- WeddingWire award winner for destination wedding hair & makeup
+- Target audience: women 25-60 who value wellness, self-care, and beauty
+- Seeking authentic influencers in Florida Keys, South Florida, or wellness/travel niches
 
-CRITERIOS DE MATCH (score 0-100):
-- Ubicación Miami/South Florida: +25 puntos
-- Género femenino: +20 puntos
-- Edad aparente entre 25-60: +15 puntos
-- Nicho lifestyle/fashion/beauty/luxury: +15 puntos
-- Engagement > 3%: +10 puntos
-- Bio personal (parece persona real): +10 puntos
-- Mención de familia/maternidad/bridal/wedding: +5 puntos
+MATCH CRITERIA (score 0-100):
+- Location Florida Keys / South Florida / Miami: +25 points
+- Female gender: +20 points
+- Apparent age 25-60: +15 points
+- Wellness / beauty / self-care / spa / lifestyle niche: +15 points
+- Engagement > 3%: +10 points
+- Personal bio (seems like a real person): +10 points
+- Mention of bridal/wedding, travel/destination, holistic health, or yoga: +5 points
 
-PENALIZACIONES:
-- Palabras de shop/tienda en bio: -50 puntos
-- Sin bio: -30 puntos
-- Género masculino claramente detectado: -40 puntos
-- Edad claramente fuera del rango 25-60: -30 puntos
-- Ubicación claramente fuera de Miami/Florida: -20 puntos
+PENALTIES:
+- Shop/store/business service words in bio: -50 points
+- No bio: -30 points
+- Clearly male gender detected: -40 points
+- Age clearly outside 25-60 range: -30 points
+- Location clearly outside Florida/USA: -20 points
 
-CLASIFICACIÓN REQUERIDA — Inferí con la info disponible (nombre, bio, ciudad Apify, estilo):
+REQUIRED CLASSIFICATION — Infer from name, bio, Apify city, and writing style:
 
-gender: Determiná si el perfil parece ser de una mujer ("female"), un hombre ("male"), o no se puede determinar ("unknown"). Basate en el nombre completo, pronombres en la bio, estilo de escritura.
+gender: Determine if the profile seems female ("female"), male ("male"), or undetermined ("unknown"). Base on full name, pronouns, bio style.
 
-estimatedAge: Estimá el rango de edad según lenguaje, intereses y contexto de la bio:
-  - "under25": parece menor de 25 (ej: lenguaje muy joven, estudiante universitario)
-  - "25-34": adulto joven
-  - "35-44": adulto maduro
-  - "45-60": adulto senior activo
-  - "over60": parece mayor de 60
-  - "unknown": no hay información suficiente
+estimatedAge: Estimate age range from language, interests, and bio context:
+  - "under25": appears under 25 (very young language, college student)
+  - "25-34": young adult
+  - "35-44": mature adult
+  - "45-60": active senior adult
+  - "over60": appears over 60
+  - "unknown": insufficient information
 
-inferredCity: Nombre de la ciudad en minúsculas donde vive o está basado el perfil.
-  Usá la ciudad de Apify si está disponible. Si no, buscá menciones en la bio (ej: "Miami mom", "NYC based", "living in LA").
-  Si no podés determinarlo con razonable certeza, devolvé "unknown".
+inferredCity: Lowercase city name where the profile is based.
+  Use Apify city if available. Otherwise look for bio mentions (e.g. "Keys girl", "Miami based", "living in Florida").
+  If not determinable with reasonable certainty, return "unknown".
 
-Respondé SOLO con JSON válido, sin texto adicional ni bloques markdown:
+Respond ONLY with valid JSON, no additional text or markdown blocks:
 {
   "score": 0-100,
   "label": "High Match" | "Medium Match" | "Low Match",
   "reason": "brief explanation in English (1 line)",
-  "niche": "categoría del perfil (ej: Lifestyle Miami, Fashion Blogger, etc.)",
+  "niche": "profile category (e.g. Wellness Florida Keys, Beauty Blogger, Lifestyle Miami, etc.)",
   "gender": "female" | "male" | "unknown",
   "estimatedAge": "under25" | "25-34" | "35-44" | "45-60" | "over60" | "unknown",
   "inferredCity": "city name in lowercase or unknown"
@@ -110,9 +113,9 @@ Respondé SOLO con JSON válido, sin texto adicional ni bloques markdown:
 }
 
 export async function scoreTikTokCreator(creator: TikTokCreator): Promise<ScoreResult> {
-  const prompt = `You are an influencer marketing expert for a fine jewelry brand.
+  const prompt = `You are an influencer marketing expert for a wellness, beauty, and spa brand.
 Analyze this TikTok creator profile and calculate a match score from 0 to 100
-for the brand Monisha Melwani Fine Jewelry.
+for Ciao Bella Salon, Day Spa & Wellness Center.
 
 PROFILE:
 Username: ${creator.username}
@@ -125,28 +128,31 @@ Avg Likes per video: ${Math.round(creator.avgLikes)}
 Engagement Rate: ${creator.engagementRate.toFixed(2)}%
 Sample captions: ${creator.topCaptions.slice(0, 3).join(' | ') || 'none'}
 
-ABOUT MONISHA MELWANI:
-- Fine jewelry with natural and lab-grown diamonds
-- Everyday luxury, pieces to wear and layer
-- Showroom in Miami, FL
-- Target audience: women 25-60 years old, mid-to-high purchasing power, USA
-- Looking for authentic Miami influencers or South Florida area
+ABOUT CIAO BELLA:
+- Voted #1 Salon, Day Spa & Wellness Center in Islamorada, Florida Keys
+- 20+ years delivering premium beauty and holistic self-care
+- Services: therapeutic massage, anti-aging skincare, infrared yoga, sound therapy,
+  salt infrared sauna, red light therapy, compression therapy, hair care,
+  nail services, organic spray tanning, clean waxing, day retreats
+- WeddingWire award winner for destination wedding hair & makeup
+- Target audience: women 25-60 who value wellness, self-care, and beauty
+- Seeking authentic influencers in Florida Keys, South Florida, or wellness/travel niches
 
 MATCH CRITERIA (score 0-100):
-- Location Miami/South Florida: +25 points
+- Location Florida Keys / South Florida / Miami: +25 points
 - Female gender: +20 points
 - Apparent age 25-60: +15 points
-- Lifestyle/fashion/beauty/luxury niche: +15 points
+- Wellness / beauty / self-care / spa / lifestyle niche: +15 points
 - Engagement > 3%: +10 points
 - Personal bio (seems like a real person): +10 points
-- Family/maternity/bridal/wedding mention: +5 points
+- Mention of bridal/wedding, travel/destination, holistic health, or yoga: +5 points
 
 PENALTIES:
-- Shop/store words in bio or captions: -50 points
+- Shop/store/business service words in bio or captions: -50 points
 - No bio: -30 points
 - Clearly male gender detected: -40 points
 - Age clearly outside 25-60 range: -30 points
-- Location clearly outside Miami/Florida: -20 points
+- Location clearly outside Florida/USA: -20 points
 
 REQUIRED CLASSIFICATION:
 gender: Determine if the profile seems female ("female"), male ("male"), or undetermined ("unknown"). Base on display name, pronouns, bio style, and caption topics.
@@ -158,7 +164,7 @@ Respond ONLY with valid JSON, no additional text or markdown blocks:
   "score": 0-100,
   "label": "High Match" | "Medium Match" | "Low Match",
   "reason": "brief explanation in English (1 line)",
-  "niche": "profile category (e.g. Lifestyle Miami, Fashion Creator, etc.)",
+  "niche": "profile category (e.g. Wellness Florida Keys, Beauty Creator, Lifestyle Travel, etc.)",
   "gender": "female" | "male" | "unknown",
   "estimatedAge": "under25" | "25-34" | "35-44" | "45-60" | "over60" | "unknown",
   "inferredCity": "city name in lowercase or unknown"

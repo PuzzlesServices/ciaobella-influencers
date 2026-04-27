@@ -23,8 +23,8 @@ const CampaignSidebar = ({ activeView, onNavigate }: Props) => {
       {/* Logo */}
       <div className="px-6 py-5 border-b border-sidebar-border flex justify-center">
         <Image
-          src="/logo-monisha.webp"
-          alt="Monisha Melwani"
+          src="/logo-ciaobella.png"
+          alt="Ciao Bella"
           width={100}
           height={48}
           className="object-contain"
